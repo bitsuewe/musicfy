@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import api from '../services/api';
 
 const PlayerContext = createContext(null);
@@ -73,24 +73,111 @@ export const PlayerProvider = ({ children }) => {
   const playerRef = useRef(null);
   const progressIntervalRef = useRef(null);
   const initialSeekDoneRef = useRef(false);
+  const userInitiatedPauseRef = useRef(false);
+
+  // Synchronous references to avoid stale closure in MediaSession and background events
+  const currentTrackRef = useRef(currentTrack);
+  const isPlayingRef = useRef(isPlaying);
+  const currentTimeRef = useRef(currentTime);
+  const durationRef = useRef(duration);
+  const queueRef = useRef(queue);
+  const currentIndexRef = useRef(currentIndex);
+  const repeatModeRef = useRef(repeatMode);
+  const shuffleRef = useRef(shuffle);
+  const autoPlaySimilarRef = useRef(autoPlaySimilar);
+
+  useEffect(() => { currentTrackRef.current = currentTrack; }, [currentTrack]);
+  useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+  useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
+  useEffect(() => { durationRef.current = duration; }, [duration]);
+  useEffect(() => { queueRef.current = queue; }, [queue]);
+  useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
+  useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
+  useEffect(() => { shuffleRef.current = shuffle; }, [shuffle]);
+  useEffect(() => { autoPlaySimilarRef.current = autoPlaySimilar; }, [autoPlaySimilar]);
+
+  // Mobile Background Audio Keep-Alive Anchor (Audio Session keeper)
+  const startAudioAnchor = useCallback(() => {
+    try {
+      const anchor = document.getElementById('musicfy-bg-audio-anchor');
+      if (anchor) {
+        anchor.muted = false;
+        anchor.volume = 0.01; // Inaudible audio level keeping iOS/Android AudioSession active
+        const p = anchor.play();
+        if (p && p.catch) p.catch(() => {});
+      }
+    } catch (e) {}
+  }, []);
+
+  const stopAudioAnchor = useCallback(() => {
+    try {
+      const anchor = document.getElementById('musicfy-bg-audio-anchor');
+      if (anchor) {
+        anchor.pause();
+      }
+    } catch (e) {}
+  }, []);
+
+  // Media Session API Sync
+  const updateMediaSessionMetadata = useCallback((track) => {
+    if (!('mediaSession' in navigator) || !track) return;
+    try {
+      const artworkUrl = track.thumbnail || 'https://i.ytimg.com/vi/fHI8X4OXluQ/hqdefault.jpg';
+      navigator.mediaSession.metadata = new window.MediaMetadata({
+        title: track.title || 'Track',
+        artist: track.artistName || 'Artist',
+        album: track.category || 'Musicfy',
+        artwork: [
+          { src: artworkUrl, sizes: '96x96', type: 'image/jpeg' },
+          { src: artworkUrl, sizes: '128x128', type: 'image/jpeg' },
+          { src: artworkUrl, sizes: '192x192', type: 'image/jpeg' },
+          { src: artworkUrl, sizes: '256x256', type: 'image/jpeg' },
+          { src: artworkUrl, sizes: '384x384', type: 'image/jpeg' },
+          { src: artworkUrl, sizes: '512x512', type: 'image/jpeg' }
+        ]
+      });
+    } catch (e) {}
+  }, []);
+
+  const updateMediaSessionPlaybackState = useCallback((playing) => {
+    if ('mediaSession' in navigator) {
+      try {
+        navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
+      } catch (e) {}
+    }
+  }, []);
+
+  const updateMediaSessionPosition = useCallback((pos, dur) => {
+    if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
+      try {
+        const d = Math.max(1, Number(dur) || 200);
+        const p = Math.min(d, Math.max(0, Number(pos) || 0));
+        navigator.mediaSession.setPositionState({
+          duration: d,
+          playbackRate: 1,
+          position: p
+        });
+      } catch (e) {}
+    }
+  }, []);
 
   // Helper to persist state to localStorage
-  const saveState = (overrides = {}) => {
+  const saveState = useCallback((overrides = {}) => {
     try {
       const data = {
-        currentTrack: overrides.currentTrack !== undefined ? overrides.currentTrack : currentTrack,
-        currentTime: overrides.currentTime !== undefined ? overrides.currentTime : currentTime,
-        duration: overrides.duration !== undefined ? overrides.duration : duration,
-        queue: overrides.queue !== undefined ? overrides.queue : queue,
-        currentIndex: overrides.currentIndex !== undefined ? overrides.currentIndex : currentIndex,
+        currentTrack: overrides.currentTrack !== undefined ? overrides.currentTrack : currentTrackRef.current,
+        currentTime: overrides.currentTime !== undefined ? overrides.currentTime : currentTimeRef.current,
+        duration: overrides.duration !== undefined ? overrides.duration : durationRef.current,
+        queue: overrides.queue !== undefined ? overrides.queue : queueRef.current,
+        currentIndex: overrides.currentIndex !== undefined ? overrides.currentIndex : currentIndexRef.current,
         volume: overrides.volume !== undefined ? overrides.volume : volume,
-        shuffle: overrides.shuffle !== undefined ? overrides.shuffle : shuffle,
-        repeatMode: overrides.repeatMode !== undefined ? overrides.repeatMode : repeatMode,
+        shuffle: overrides.shuffle !== undefined ? overrides.shuffle : shuffleRef.current,
+        repeatMode: overrides.repeatMode !== undefined ? overrides.repeatMode : repeatModeRef.current,
         timestamp: Date.now()
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch (e) {}
-  };
+  }, [volume]);
 
   const saveRecentTrack = (track) => {
     if (!track || !track.id) return;
@@ -111,7 +198,7 @@ export const PlayerProvider = ({ children }) => {
     };
     window.addEventListener('beforeunload', handleUnload);
     return () => window.removeEventListener('beforeunload', handleUnload);
-  });
+  }, [saveState]);
 
   // Fetch Initial User Likes & Recent Playback History on login/refresh
   useEffect(() => {
@@ -158,6 +245,7 @@ export const PlayerProvider = ({ children }) => {
               const latest = uniqueHistoryTracks[0];
               setCurrentTrack(latest);
               setQueue([latest]);
+              updateMediaSessionMetadata(latest);
             }
           }
         }
@@ -189,6 +277,13 @@ export const PlayerProvider = ({ children }) => {
     };
   }, []);
 
+  // Update MediaSession metadata when currentTrack changes
+  useEffect(() => {
+    if (currentTrack) {
+      updateMediaSessionMetadata(currentTrack);
+    }
+  }, [currentTrack, updateMediaSessionMetadata]);
+
   const initPlayer = (videoId) => {
     if (playerRef.current) return;
 
@@ -203,6 +298,9 @@ export const PlayerProvider = ({ children }) => {
         fs: 0,
         modestbranding: 1,
         rel: 0,
+        playsinline: 1,
+        enablejsapi: 1,
+        iv_load_policy: 3,
         start: Math.floor(currentTime || 0),
         origin: window.location.origin
       },
@@ -220,14 +318,33 @@ export const PlayerProvider = ({ children }) => {
         },
         onStateChange: (event) => {
           if (event.data === window.YT.PlayerState.PLAYING) {
+            userInitiatedPauseRef.current = false;
             setIsPlaying(true);
+            startAudioAnchor();
+            updateMediaSessionPlaybackState(true);
             const d = event.target.getDuration();
-            if (d) setDuration(Math.round(d));
+            if (d) {
+              const durSec = Math.round(d);
+              setDuration(durSec);
+              updateMediaSessionPosition(currentTimeRef.current, durSec);
+            }
             startProgressTimer();
           } else if (event.data === window.YT.PlayerState.PAUSED) {
-            setIsPlaying(false);
-            stopProgressTimer();
-            saveState();
+            // Check if pause was an involuntary mobile background suspension
+            if (document.hidden && !userInitiatedPauseRef.current) {
+              // Attempt automatic background wake-up
+              try {
+                if (playerRef.current && playerRef.current.playVideo) {
+                  playerRef.current.playVideo();
+                }
+              } catch (e) {}
+            } else {
+              setIsPlaying(false);
+              stopAudioAnchor();
+              updateMediaSessionPlaybackState(false);
+              stopProgressTimer();
+              saveState();
+            }
           } else if (event.data === window.YT.PlayerState.ENDED) {
             setIsPlaying(false);
             stopProgressTimer();
@@ -242,9 +359,12 @@ export const PlayerProvider = ({ children }) => {
     stopProgressTimer();
     progressIntervalRef.current = setInterval(() => {
       if (playerRef.current && playerRef.current.getCurrentTime) {
-        const time = Math.round(playerRef.current.getCurrentTime());
-        setCurrentTime(time);
-        saveState({ currentTime: time });
+        try {
+          const time = Math.round(playerRef.current.getCurrentTime());
+          setCurrentTime(time);
+          saveState({ currentTime: time });
+          updateMediaSessionPosition(time, durationRef.current);
+        } catch (e) {}
       }
     }, 1500);
   };
@@ -254,48 +374,52 @@ export const PlayerProvider = ({ children }) => {
   };
 
   const handleTrackEnded = async () => {
-    if (currentTrack) {
+    const cur = currentTrackRef.current;
+    if (cur) {
       api.post('/history', {
-        trackId: currentTrack.id,
-        track: currentTrack,
-        durationSec: duration,
+        trackId: cur.id,
+        track: cur,
+        durationSec: durationRef.current,
         completed: true
       }).catch(() => {});
     }
 
-    if (repeatMode === 'one') {
+    if (repeatModeRef.current === 'one') {
       seekTo(0);
-      playTrack(currentTrack);
+      playTrack(cur);
       return;
     }
 
-    let nextIdx = currentIndex + 1;
-    if (shuffle) {
-      nextIdx = Math.floor(Math.random() * queue.length);
+    const q = queueRef.current;
+    const curIdx = currentIndexRef.current;
+    let nextIdx = curIdx + 1;
+
+    if (shuffleRef.current) {
+      nextIdx = Math.floor(Math.random() * q.length);
     }
 
-    if (nextIdx < queue.length) {
+    if (nextIdx < q.length) {
       setCurrentIndex(nextIdx);
-      playTrack(queue[nextIdx]);
+      playTrack(q[nextIdx]);
       return;
     }
 
-    if (repeatMode === 'all') {
+    if (repeatModeRef.current === 'all') {
       setCurrentIndex(0);
-      playTrack(queue[0]);
+      playTrack(q[0]);
       return;
     }
 
-    if (autoPlaySimilar && currentTrack) {
+    if (autoPlaySimilarRef.current && cur) {
       try {
-        const res = await api.get(`/music/search?q=${encodeURIComponent(currentTrack.artistName)}`);
-        const newTracks = (res.data.tracks || []).filter(t => t.id !== currentTrack.id && !queue.some(q => q.id === t.id));
+        const res = await api.get(`/music/search?q=${encodeURIComponent(cur.artistName)}`);
+        const newTracks = (res.data.tracks || []).filter(t => t.id !== cur.id && !q.some(item => item.id === t.id));
         
         if (newTracks.length > 0) {
           const nextAutoTrack = newTracks[0];
-          const updatedQ = [...queue, ...newTracks];
+          const updatedQ = [...q, ...newTracks];
           setQueue(updatedQ);
-          setCurrentIndex(queue.length);
+          setCurrentIndex(q.length);
           playTrack(nextAutoTrack, updatedQ);
           showToast(`Autoplaying next: "${nextAutoTrack.title}"`);
           return;
@@ -303,9 +427,9 @@ export const PlayerProvider = ({ children }) => {
       } catch (err) {}
     }
 
-    if (queue.length > 0) {
+    if (q.length > 0) {
       setCurrentIndex(0);
-      playTrack(queue[0]);
+      playTrack(q[0]);
     }
   };
 
@@ -317,8 +441,9 @@ export const PlayerProvider = ({ children }) => {
   const playTrack = (track, newQueue = null, startTime = 0) => {
     if (!track || !track.id) return;
 
-    let updatedQueue = queue;
-    let nextIdx = currentIndex;
+    userInitiatedPauseRef.current = false;
+    let updatedQueue = queueRef.current;
+    let nextIdx = currentIndexRef.current;
 
     if (newQueue && Array.isArray(newQueue) && newQueue.length > 0) {
       updatedQueue = newQueue;
@@ -326,13 +451,13 @@ export const PlayerProvider = ({ children }) => {
       const idx = newQueue.findIndex(t => t.id === track.id);
       nextIdx = idx >= 0 ? idx : 0;
       setCurrentIndex(nextIdx);
-    } else if (!queue.some(t => t.id === track.id)) {
-      updatedQueue = [...queue, track];
+    } else if (!queueRef.current.some(t => t.id === track.id)) {
+      updatedQueue = [...queueRef.current, track];
       setQueue(updatedQueue);
-      nextIdx = queue.length;
+      nextIdx = queueRef.current.length;
       setCurrentIndex(nextIdx);
     } else {
-      const idx = queue.findIndex(t => t.id === track.id);
+      const idx = queueRef.current.findIndex(t => t.id === track.id);
       nextIdx = idx >= 0 ? idx : 0;
       setCurrentIndex(nextIdx);
     }
@@ -341,6 +466,11 @@ export const PlayerProvider = ({ children }) => {
     setIsPlaying(true);
     setCurrentTime(startTime);
     setDuration(track.durationSec || 200);
+
+    startAudioAnchor();
+    updateMediaSessionMetadata(track);
+    updateMediaSessionPlaybackState(true);
+    updateMediaSessionPosition(startTime, track.durationSec || 200);
 
     saveRecentTrack(track);
 
@@ -370,34 +500,41 @@ export const PlayerProvider = ({ children }) => {
   const togglePlay = () => {
     if (!playerRef.current) return;
     if (isPlaying) {
+      userInitiatedPauseRef.current = true;
       playerRef.current.pauseVideo();
       setIsPlaying(false);
+      stopAudioAnchor();
+      updateMediaSessionPlaybackState(false);
       saveState();
     } else {
+      userInitiatedPauseRef.current = false;
       playerRef.current.playVideo();
       setIsPlaying(true);
+      startAudioAnchor();
+      updateMediaSessionPlaybackState(true);
     }
   };
 
   const playNext = async () => {
-    if (queue.length === 0) return;
+    const q = queueRef.current;
+    if (q.length === 0) return;
 
-    let nextIdx = currentIndex + 1;
-    if (shuffle) {
-      nextIdx = Math.floor(Math.random() * queue.length);
+    let nextIdx = currentIndexRef.current + 1;
+    if (shuffleRef.current) {
+      nextIdx = Math.floor(Math.random() * q.length);
     }
 
-    if (nextIdx >= queue.length) {
-      if (repeatMode === 'all') {
+    if (nextIdx >= q.length) {
+      if (repeatModeRef.current === 'all') {
         nextIdx = 0;
-      } else if (autoPlaySimilar && currentTrack) {
+      } else if (autoPlaySimilarRef.current && currentTrackRef.current) {
         try {
-          const res = await api.get(`/music/search?q=${encodeURIComponent(currentTrack.artistName)}`);
-          const newTracks = (res.data.tracks || []).filter(t => !queue.some(q => q.id === t.id));
+          const res = await api.get(`/music/search?q=${encodeURIComponent(currentTrackRef.current.artistName)}`);
+          const newTracks = (res.data.tracks || []).filter(t => !q.some(item => item.id === t.id));
           if (newTracks.length > 0) {
-            const updatedQ = [...queue, ...newTracks];
+            const updatedQ = [...q, ...newTracks];
             setQueue(updatedQ);
-            nextIdx = queue.length;
+            nextIdx = q.length;
             playTrack(newTracks[0], updatedQ);
             return;
           } else {
@@ -411,7 +548,7 @@ export const PlayerProvider = ({ children }) => {
       }
     }
 
-    const nextTrack = queue[nextIdx];
+    const nextTrack = q[nextIdx];
     if (nextTrack) {
       setCurrentIndex(nextIdx);
       playTrack(nextTrack);
@@ -419,15 +556,16 @@ export const PlayerProvider = ({ children }) => {
   };
 
   const playPrev = () => {
-    if (currentTime > 3) {
+    if (currentTimeRef.current > 3) {
       seekTo(0);
       return;
     }
 
-    let prevIdx = currentIndex - 1;
-    if (prevIdx < 0) prevIdx = queue.length - 1;
+    const q = queueRef.current;
+    let prevIdx = currentIndexRef.current - 1;
+    if (prevIdx < 0) prevIdx = q.length - 1;
 
-    const prevTrack = queue[prevIdx];
+    const prevTrack = q[prevIdx];
     if (prevTrack) {
       setCurrentIndex(prevIdx);
       playTrack(prevTrack);
@@ -435,11 +573,12 @@ export const PlayerProvider = ({ children }) => {
   };
 
   const seekTo = (seconds) => {
-    const sec = Math.max(0, Math.min(duration, Math.round(seconds)));
+    const sec = Math.max(0, Math.min(durationRef.current, Math.round(seconds)));
     if (playerRef.current && playerRef.current.seekTo) {
       playerRef.current.seekTo(sec, true);
       setCurrentTime(sec);
       saveState({ currentTime: sec });
+      updateMediaSessionPosition(sec, durationRef.current);
     }
   };
 
@@ -464,20 +603,123 @@ export const PlayerProvider = ({ children }) => {
     }
   };
 
+  // Register Native Media Session Action Handlers
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return;
+
+    const handlers = [
+      ['play', () => {
+        userInitiatedPauseRef.current = false;
+        if (playerRef.current && playerRef.current.playVideo) {
+          playerRef.current.playVideo();
+          setIsPlaying(true);
+          startAudioAnchor();
+          updateMediaSessionPlaybackState(true);
+        }
+      }],
+      ['pause', () => {
+        userInitiatedPauseRef.current = true;
+        if (playerRef.current && playerRef.current.pauseVideo) {
+          playerRef.current.pauseVideo();
+          setIsPlaying(false);
+          stopAudioAnchor();
+          updateMediaSessionPlaybackState(false);
+        }
+      }],
+      ['previoustrack', () => playPrev()],
+      ['nexttrack', () => playNext()],
+      ['seekto', (details) => {
+        if (details.seekTime !== undefined) {
+          seekTo(details.seekTime);
+        }
+      }],
+      ['seekbackward', (details) => {
+        const offset = details.seekOffset || 10;
+        seekTo(Math.max(0, currentTimeRef.current - offset));
+      }],
+      ['seekforward', (details) => {
+        const offset = details.seekOffset || 10;
+        seekTo(Math.min(durationRef.current, currentTimeRef.current + offset));
+      }],
+      ['stop', () => {
+        userInitiatedPauseRef.current = true;
+        if (playerRef.current && playerRef.current.pauseVideo) {
+          playerRef.current.pauseVideo();
+          setIsPlaying(false);
+          stopAudioAnchor();
+          updateMediaSessionPlaybackState(false);
+        }
+        seekTo(0);
+      }]
+    ];
+
+    handlers.forEach(([action, handler]) => {
+      try {
+        navigator.mediaSession.setActionHandler(action, handler);
+      } catch (e) {}
+    });
+
+    return () => {
+      handlers.forEach(([action]) => {
+        try {
+          navigator.mediaSession.setActionHandler(action, null);
+        } catch (e) {}
+      });
+    };
+  }, [startAudioAnchor, updateMediaSessionPlaybackState]);
+
+  // Page Visibility & Lifecycle Event Handling for Background Resiliency
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // App went to background (user switched apps or locked phone)
+        if (isPlayingRef.current) {
+          startAudioAnchor();
+          updateMediaSessionPlaybackState(true);
+          // If player was playing and was not manually paused, ensure it keeps playing
+          if (playerRef.current && playerRef.current.playVideo && !userInitiatedPauseRef.current) {
+            try {
+              playerRef.current.playVideo();
+            } catch (e) {}
+          }
+        }
+      } else {
+        // App returned to foreground
+        if (playerRef.current && playerRef.current.getCurrentTime) {
+          try {
+            const time = Math.round(playerRef.current.getCurrentTime());
+            setCurrentTime(time);
+            if (isPlayingRef.current) {
+              updateMediaSessionPosition(time, durationRef.current);
+            }
+          } catch (e) {}
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handleVisibilityChange);
+    };
+  }, [startAudioAnchor, updateMediaSessionPlaybackState, updateMediaSessionPosition]);
+
   const addToQueue = (track) => {
     if (!track || !track.id) return;
-    const updated = [...queue, track];
+    const updated = [...queueRef.current, track];
     setQueue(updated);
     saveState({ queue: updated });
     showToast(`Added "${track.title}" to Queue`);
   };
 
   const removeFromQueue = (indexToRemove) => {
-    const updated = queue.filter((_, i) => i !== indexToRemove);
+    const updated = queueRef.current.filter((_, i) => i !== indexToRemove);
     setQueue(updated);
-    let nextIdx = currentIndex;
-    if (indexToRemove < currentIndex) {
-      nextIdx = currentIndex - 1;
+    let nextIdx = currentIndexRef.current;
+    if (indexToRemove < currentIndexRef.current) {
+      nextIdx = currentIndexRef.current - 1;
       setCurrentIndex(nextIdx);
     }
     saveState({ queue: updated, currentIndex: nextIdx });
@@ -485,8 +727,8 @@ export const PlayerProvider = ({ children }) => {
   };
 
   const clearQueue = () => {
-    if (currentTrack) {
-      const single = [currentTrack];
+    if (currentTrackRef.current) {
+      const single = [currentTrackRef.current];
       setQueue(single);
       setCurrentIndex(0);
       saveState({ queue: single, currentIndex: 0 });
@@ -494,7 +736,7 @@ export const PlayerProvider = ({ children }) => {
     }
   };
 
-  // ❤️ Bulletproof Liked Songs persistence
+  // ❤️ Liked Songs persistence
   const toggleLike = async (track) => {
     if (!track || !track.id) return;
 
@@ -544,6 +786,7 @@ export const PlayerProvider = ({ children }) => {
       toastMessage,
       showSidePlayer,
       autoPlaySimilar,
+      backgroundPlayEnabled: true,
       playTrack,
       togglePlay,
       playNext,
@@ -576,3 +819,4 @@ export const PlayerProvider = ({ children }) => {
 };
 
 export const usePlayer = () => useContext(PlayerContext);
+

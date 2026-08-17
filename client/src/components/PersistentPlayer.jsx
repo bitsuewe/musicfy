@@ -231,7 +231,11 @@ export default function PersistentPlayer() {
 
               {/* Options Dropdown */}
               {showOptionsMenu && (
-                <div className="absolute bottom-8 right-0 w-44 bg-[#1F1F22] border border-white/15 rounded-xl shadow-2xl p-1.5 space-y-1 text-xs z-50">
+                <div className="absolute bottom-8 right-0 w-52 bg-[#1F1F22] border border-white/15 rounded-xl shadow-2xl p-1.5 space-y-1 text-xs z-50">
+                  <div className="px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[10px] text-[#34D399] flex items-center gap-1.5 font-semibold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] animate-ping shrink-0" />
+                    <span>Background & Lock Screen Play Active</span>
+                  </div>
                   <button
                     onClick={() => { toggleLike(currentTrack); setShowOptionsMenu(false); }}
                     className="w-full px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-left flex items-center gap-2 text-white"
@@ -347,9 +351,14 @@ export default function PersistentPlayer() {
               className="w-56 h-56 sm:w-72 sm:h-72 md:w-88 md:h-88 rounded-3xl object-cover shadow-[0_30px_90px_rgba(0,0,0,0.8)] border border-white/20"
             />
             <div className="text-center lg:text-left space-y-3 max-w-lg">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold bg-white/10 backdrop-blur-xl text-white/90 border border-white/15 shadow-sm">
-                <span className="w-2 h-2 rounded-full bg-[#10B981] animate-ping" />
-                Lossless • Dolby Atmos
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold bg-white/10 backdrop-blur-xl text-white/90 border border-white/15 shadow-sm">
+                  <span className="w-2 h-2 rounded-full bg-[#10B981] animate-ping" />
+                  Lossless • Dolby Atmos
+                </div>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-[#10B981]/15 text-[#34D399] border border-[#10B981]/30 backdrop-blur-xl shadow-sm">
+                  <span>📱 Lock-Screen & Background Play Active</span>
+                </div>
               </div>
               <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-tight line-clamp-2">
                 {currentTrack.title}

@@ -40,9 +40,21 @@ function AppContent() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#09090B] text-[#FAFAFA] antialiased select-none">
       
-      {/* YouTube IFrame Container Permanent Mount (Invisible compliance element) */}
-      <div className="fixed -top-[9999px] -left-[9999px] w-1 h-1 pointer-events-none opacity-0 overflow-hidden">
+      {/* YouTube IFrame Container & Mobile Background Audio Keeper */}
+      <div 
+        aria-hidden="true" 
+        className="fixed bottom-0 right-0 w-[1px] h-[1px] pointer-events-none opacity-[0.001] overflow-hidden -z-50"
+        style={{ transform: 'translateZ(0)' }}
+      >
         <div id="musicfy-yt-player-iframe" />
+        {/* Silent HTML5 audio keeper: enables iOS AVAudioSession and Android AudioFocus background lockscreen audio */}
+        <audio
+          id="musicfy-bg-audio-anchor"
+          loop
+          playsInline
+          preload="auto"
+          src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"
+        />
       </div>
 
       {/* Desktop Sidebar */}

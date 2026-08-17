@@ -187,6 +187,20 @@ export default function SidePlayer({ onAddToPlaylist }) {
                 </div>
               </div>
 
+              {/* Background & Lock-Screen Play Status */}
+              <div className="p-3 rounded-2xl bg-gradient-to-r from-[#10B981]/10 to-transparent border border-[#10B981]/20 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-[#10B981] animate-ping shrink-0" />
+                  <div>
+                    <p className="text-[11px] font-bold text-white leading-tight">Background Play Active</p>
+                    <p className="text-[10px] text-[#A1A1AA]">Lock screen & switch apps freely</p>
+                  </div>
+                </div>
+                <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-[#10B981]/20 text-[#34D399] border border-[#10B981]/30">
+                  ON
+                </span>
+              </div>
+
               {/* Next in Queue Preview */}
               {upcomingQueue.length > 0 && (
                 <div className="p-3.5 rounded-2xl bg-[#18181C] border border-white/5 space-y-2">
