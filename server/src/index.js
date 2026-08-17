@@ -86,10 +86,6 @@ const apiLimiter = rateLimit({
   }
 });
 
-app.use('/api/auth/login', authLimiter);
-app.use('/api/auth/register', authLimiter);
-app.use('/api', apiLimiter, apiRoutes);
-
 // Health & Root Status Endpoints
 app.get('/', (req, res) => {
   res.json({
@@ -114,6 +110,14 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Mount routes on /api AND as direct fallback (e.g. /auth/login and /api/auth/login both work)
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+app.use('/auth/login', authLimiter);
+app.use('/auth/register', authLimiter);
+app.use('/api', apiLimiter, apiRoutes);
+app.use('/', apiLimiter, apiRoutes);
+
 // Socket.io Real-time Social Listener
 io.on('connection', (socket) => {
   socket.on('user_listening', (data) => {
@@ -125,8 +129,10 @@ io.on('connection', (socket) => {
   });
 });
 
-// 404 & Global Error Handling Middleware
-app.use('/api/*', notFoundHandler);
+// 404 Catch-All & Global Error Handling Middleware
+app.use((req, res) => {
+  notFoundHandler(req, res);
+});
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
