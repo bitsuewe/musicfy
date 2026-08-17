@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    background-color: #121212;
+    color: #FFFFFF;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+    overflow-x: hidden;
+  }
+}
+
+/* Spotify + Apple Music Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #121212;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #282828;
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3E3E3E;
+}
+
+/* Apple Music Liquid Glassmorphism */
+.apple-glass {
+  background: rgba(24, 24, 28, 0.75);
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.spotify-card {
+  background: #181818;
+  border-radius: 12px;
+  transition: background-color 0.3s ease, transform 0.25s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.spotify-card:hover {
+  background: #282828;
+}
+
+/* Spotify Green Glow & Accents */
+.spotify-glow {
+  box-shadow: 0 8px 24px rgba(29, 185, 84, 0.4);
+}
+
+.spotify-glow-sm {
+  box-shadow: 0 4px 14px rgba(29, 185, 84, 0.25);
+}
+
+/* Card hover lift & play button pop */
+.spotify-card-hover {
+  transition: transform 0.25s ease, box-shadow 0.25s ease, background-color 0.25s ease;
+}
+
+.spotify-card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 32px -8px rgba(0, 0, 0, 0.7);
+  background-color: #242424;
+}
+
+/* Heart Burst Animation */
+@keyframes heartBurst {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+
+.animate-heart-burst {
+  animation: heartBurst 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
