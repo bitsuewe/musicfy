@@ -65,6 +65,54 @@ test('Complete User Registration & Session Cookie Flow', async () => {
   assert.strictEqual(logoutData.success, true);
 });
 
+test('Duplicate Email Registration Prevention', async () => {
+  const email = `dup_email_${Date.now()}@example.com`;
+  
+  // Register first user
+  const res1 = await fetch(`${BASE_URL}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: `userA_${Date.now()}`, email, password: 'Password123!' })
+  });
+  assert.strictEqual(res1.status, 201);
+
+  // Register second user with SAME email
+  const res2 = await fetch(`${BASE_URL}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: `userB_${Date.now()}`, email, password: 'Password123!' })
+  });
+  assert.strictEqual(res2.status, 400);
+  const data2 = await res2.json();
+  assert.strictEqual(data2.success, false);
+  assert.strictEqual(data2.error.code, 'EMAIL_ALREADY_EXISTS');
+  assert.match(data2.error.message, /email address is already registered/i);
+});
+
+test('Duplicate Username Registration Prevention', async () => {
+  const username = `unique_user_${Date.now()}`;
+
+  // Register first user
+  const res1 = await fetch(`${BASE_URL}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, email: `emailA_${Date.now()}@example.com`, password: 'Password123!' })
+  });
+  assert.strictEqual(res1.status, 201);
+
+  // Register second user with SAME username
+  const res2 = await fetch(`${BASE_URL}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, email: `emailB_${Date.now()}@example.com`, password: 'Password123!' })
+  });
+  assert.strictEqual(res2.status, 400);
+  const data2 = await res2.json();
+  assert.strictEqual(data2.success, false);
+  assert.strictEqual(data2.error.code, 'USERNAME_ALREADY_EXISTS');
+  assert.match(data2.error.message, /username is already taken/i);
+});
+
 test('Forgot Password Endpoint Response', async () => {
   const res = await fetch(`${BASE_URL}/auth/forgot-password`, {
     method: 'POST',

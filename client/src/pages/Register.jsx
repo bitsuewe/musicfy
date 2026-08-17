@@ -61,7 +61,11 @@ export default function Register() {
         setError(res?.error?.message || 'Registration failed');
       }
     } catch (err) {
-      setError(err.response?.data?.error?.message || err.response?.data?.error || 'Account creation failed');
+      const serverMsg = err.response?.data?.error?.message 
+        || err.response?.data?.message 
+        || (typeof err.response?.data?.error === 'string' ? err.response.data.error : null)
+        || err.message;
+      setError(serverMsg || 'Account creation failed');
     } finally {
       setLoading(false);
     }

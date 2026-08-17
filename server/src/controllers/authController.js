@@ -32,13 +32,31 @@ export const register = async (req, res) => {
     if (!username || !email || !password) {
       return res.status(400).json({
         success: false,
-        error: { code: 'INVALID_INPUT', message: 'Username, email, and password are required.' }
+        error: { code: 'INVALID_INPUT', message: 'Username, email, and password are all required.' }
       });
     }
 
     const trimmedUsername = username.trim();
     const normalizedEmail = email.trim().toLowerCase();
 
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedEmail)) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_EMAIL', message: 'Please enter a valid email address (e.g. name@example.com).' }
+      });
+    }
+
+    // Validate username format and length
+    if (trimmedUsername.length < 3 || trimmedUsername.length > 30) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_USERNAME', message: 'Username must be between 3 and 30 characters.' }
+      });
+    }
+
+    // Validate password length
     if (password.length < 8) {
       return res.status(400).json({
         success: false,
@@ -46,26 +64,32 @@ export const register = async (req, res) => {
       });
     }
 
-    let existingUser = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { email: normalizedEmail },
-          { username: trimmedUsername }
-        ]
-      }
-    }).catch(() => null);
+    // 1. Check if Email already exists (case-insensitive)
+    const existingEmailUser = await prisma.user.findFirst({
+      where: { email: { equals: normalizedEmail, mode: 'insensitive' } }
+    }).catch(() => null) || memoryUsers.get(normalizedEmail);
 
-    if (!existingUser && memoryUsers.has(normalizedEmail)) {
-      existingUser = memoryUsers.get(normalizedEmail);
-    }
-
-    if (existingUser) {
-      const isEmail = existingUser.email === normalizedEmail;
+    if (existingEmailUser) {
       return res.status(400).json({
         success: false,
         error: {
-          code: isEmail ? 'EMAIL_ALREADY_EXISTS' : 'USERNAME_ALREADY_EXISTS',
-          message: isEmail ? 'Email address is already registered.' : 'Username is already taken.'
+          code: 'EMAIL_ALREADY_EXISTS',
+          message: 'This email address is already registered. Please sign in or use a different email.'
+        }
+      });
+    }
+
+    // 2. Check if Username already exists (case-insensitive)
+    const existingUsernameUser = await prisma.user.findFirst({
+      where: { username: { equals: trimmedUsername, mode: 'insensitive' } }
+    }).catch(() => null) || Array.from(memoryUsers.values()).find((u) => u.username?.toLowerCase() === trimmedUsername.toLowerCase());
+
+    if (existingUsernameUser) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'USERNAME_ALREADY_EXISTS',
+          message: 'This username is already taken. Please choose a different username.'
         }
       });
     }
@@ -85,6 +109,26 @@ export const register = async (req, res) => {
         }
       });
     } catch (err) {
+      if (err.code === 'P2002') {
+        const target = Array.isArray(err.meta?.target) ? err.meta.target.join(' ') : String(err.meta?.target || '');
+        if (target.includes('email')) {
+          return res.status(400).json({
+            success: false,
+            error: { code: 'EMAIL_ALREADY_EXISTS', message: 'This email address is already registered. Please sign in or use a different email.' }
+          });
+        }
+        if (target.includes('username')) {
+          return res.status(400).json({
+            success: false,
+            error: { code: 'USERNAME_ALREADY_EXISTS', message: 'This username is already taken. Please choose a different username.' }
+          });
+        }
+        return res.status(400).json({
+          success: false,
+          error: { code: 'DUPLICATE_ENTRY', message: 'An account with this email or username already exists.' }
+        });
+      }
+
       logger.warn('User table fallback active:', err.message);
       user = {
         id: `usr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
@@ -116,7 +160,7 @@ export const register = async (req, res) => {
     logger.error('Register controller error:', err);
     return res.status(500).json({
       success: false,
-      error: { code: 'SERVER_ERROR', message: 'Failed to create account.' }
+      error: { code: 'SERVER_ERROR', message: 'Failed to create account. Please try again.' }
     });
   }
 };
@@ -129,21 +173,23 @@ export const login = async (req, res) => {
     if (!input || !password) {
       return res.status(400).json({
         success: false,
-        error: { code: 'INVALID_INPUT', message: 'Email and password are required.' }
+        error: { code: 'INVALID_INPUT', message: 'Email or username and password are required.' }
       });
     }
+
+    const lowerInput = input.toLowerCase();
 
     let user = await prisma.user.findFirst({
       where: {
         OR: [
-          { email: input.toLowerCase() },
-          { username: input }
+          { email: { equals: lowerInput, mode: 'insensitive' } },
+          { username: { equals: input, mode: 'insensitive' } }
         ]
       }
     }).catch(() => null);
 
-    if (!user && memoryUsers.has(input.toLowerCase())) {
-      user = memoryUsers.get(input.toLowerCase());
+    if (!user) {
+      user = memoryUsers.get(lowerInput) || Array.from(memoryUsers.values()).find((u) => u.username?.toLowerCase() === lowerInput);
     }
 
     if (!user) {
@@ -175,7 +221,7 @@ export const login = async (req, res) => {
     logger.error('Login controller error:', err);
     return res.status(500).json({
       success: false,
-      error: { code: 'SERVER_ERROR', message: 'Login failed.' }
+      error: { code: 'SERVER_ERROR', message: 'Login failed. Please try again.' }
     });
   }
 };

@@ -17,6 +17,9 @@ dotenv.config();
 const app = express();
 const server = http.createServer(app);
 
+// Enable trust proxy for Render / Cloudflare reverse proxy headers
+app.set('trust proxy', 1);
+
 const parseAllowedOrigins = () => {
   const custom = (process.env.CORS_ALLOWED_ORIGINS || process.env.CLIENT_URL || process.env.FRONTEND_URL || '')
     .split(',')
@@ -58,8 +61,14 @@ app.use(cookieParser());
 // Production Authentication Rate Limiting (Brute Force Protection)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
-  message: { error: 'Too many login attempts from this IP address. Please try again after 15 minutes.' },
+  max: 60,
+  message: {
+    success: false,
+    error: {
+      code: 'RATE_LIMIT_EXCEEDED',
+      message: 'Too many authentication attempts. Please try again in a few minutes.'
+    }
+  },
   standardHeaders: true,
   legacyHeaders: false
 });
@@ -68,7 +77,13 @@ const authLimiter = rateLimit({
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 400,
-  message: { error: 'Too many requests from this IP, please try again later.' }
+  message: {
+    success: false,
+    error: {
+      code: 'RATE_LIMIT_EXCEEDED',
+      message: 'Too many requests, please try again later.'
+    }
+  }
 });
 
 app.use('/api/auth/login', authLimiter);

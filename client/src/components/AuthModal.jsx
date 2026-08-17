@@ -21,23 +21,43 @@ export default function AuthModal({ isOpen, onClose }) {
 
     try {
       if (isRegister) {
-        const res = await register(username, email, password);
+        if (!username.trim()) {
+          setError('Please enter a username.');
+          setLoading(false);
+          return;
+        }
+        if (!email.trim()) {
+          setError('Please enter a valid email address.');
+          setLoading(false);
+          return;
+        }
+        if (password.length < 8) {
+          setError('Password must be at least 8 characters long.');
+          setLoading(false);
+          return;
+        }
+
+        const res = await register(username.trim(), email.trim(), password);
         if (!res?.success) {
           setError(res?.error?.message || 'Registration failed');
           setLoading(false);
           return;
         }
       } else {
-        const res = await login(email, password);
+        const res = await login(email.trim(), password);
         if (!res?.success) {
-          setError(res?.error?.message || 'Invalid email or password');
+          setError(res?.error?.message || 'Invalid email/username or password');
           setLoading(false);
           return;
         }
       }
       onClose();
     } catch (err) {
-      setError(err.response?.data?.error?.message || err.response?.data?.error || 'Authentication failed');
+      const serverMsg = err.response?.data?.error?.message 
+        || err.response?.data?.message 
+        || (typeof err.response?.data?.error === 'string' ? err.response.data.error : null)
+        || err.message;
+      setError(serverMsg || (isRegister ? 'Account creation failed' : 'Authentication failed'));
     } finally {
       setLoading(false);
     }
@@ -70,7 +90,7 @@ export default function AuthModal({ isOpen, onClose }) {
 
         {/* Error Alert */}
         {error && (
-          <div className="mb-4 p-3 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold flex items-center gap-2">
+          <div className="mb-4 p-3.5 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold flex items-center gap-2 animate-shake">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
@@ -90,7 +110,7 @@ export default function AuthModal({ isOpen, onClose }) {
                   required
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Choose a handle"
+                  placeholder="Choose a handle (e.g. musiclover)"
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#18181C] border border-[#27272A] text-sm text-white focus:outline-none focus:border-[#10B981]"
                 />
               </div>
@@ -99,16 +119,16 @@ export default function AuthModal({ isOpen, onClose }) {
 
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-[#A1A1AA] mb-1.5">
-              Email or Username
+              {isRegister ? 'Email Address' : 'Email or Username'}
             </label>
             <div className="relative">
               <Mail className="w-4 h-4 text-[#71717A] absolute left-3.5 top-3.5" />
               <input
-                type="text"
+                type={isRegister ? 'email' : 'text'}
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@example.com"
+                placeholder={isRegister ? 'name@example.com' : 'Email or handle'}
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#18181C] border border-[#27272A] text-sm text-white focus:outline-none focus:border-[#10B981]"
               />
             </div>
@@ -125,7 +145,7 @@ export default function AuthModal({ isOpen, onClose }) {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder={isRegister ? 'At least 8 characters' : '••••••••'}
                 className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-[#18181C] border border-[#27272A] text-sm text-white focus:outline-none focus:border-[#10B981]"
               />
               <button
