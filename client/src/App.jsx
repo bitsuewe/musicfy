@@ -40,7 +40,7 @@ function AppContent() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#09090B] text-[#FAFAFA] antialiased select-none">
       
-      {/* YouTube IFrame Container & Mobile Background Audio Keeper */}
+      {/* YouTube IFrame Container, Mobile Background Audio Keeper & PiP Carrier */}
       <div 
         aria-hidden="true" 
         className="fixed bottom-0 right-0 w-[1px] h-[1px] pointer-events-none opacity-[0.001] overflow-hidden -z-50"
@@ -55,6 +55,9 @@ function AppContent() {
           preload="auto"
           src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"
         />
+        {/* Floating Background Picture-in-Picture (PiP) Stream Engine */}
+        <canvas id="musicfy-pip-canvas" width="512" height="512" />
+        <video id="musicfy-pip-video" playsInline muted autoPlay />
       </div>
 
       {/* Desktop Sidebar */}

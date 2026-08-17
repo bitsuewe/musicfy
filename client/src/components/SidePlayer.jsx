@@ -18,7 +18,9 @@ import {
   VolumeX,
   Maximize2,
   Sparkles,
-  ArrowDownRight
+  ArrowDownRight,
+  Tv,
+  Sun
 } from 'lucide-react';
 
 export default function SidePlayer({ onAddToPlaylist }) {
@@ -49,7 +51,12 @@ export default function SidePlayer({ onAddToPlaylist }) {
     showSidePlayer,
     setShowSidePlayer,
     autoPlaySimilar,
-    setAutoPlaySimilar
+    setAutoPlaySimilar,
+    isPipActive,
+    isPipSupported,
+    togglePictureInPicture,
+    keepScreenAwake,
+    toggleKeepScreenAwake
   } = usePlayer();
 
   const [activeTab, setActiveTab] = useState('now_playing'); // 'now_playing' | 'queue'
@@ -187,18 +194,44 @@ export default function SidePlayer({ onAddToPlaylist }) {
                 </div>
               </div>
 
-              {/* Background & Lock-Screen Play Status */}
-              <div className="p-3 rounded-2xl bg-gradient-to-r from-[#10B981]/10 to-transparent border border-[#10B981]/20 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[#10B981] animate-ping shrink-0" />
-                  <div>
-                    <p className="text-[11px] font-bold text-white leading-tight">Background Play Active</p>
-                    <p className="text-[10px] text-[#A1A1AA]">Lock screen & switch apps freely</p>
+              {/* Background & Multitasking Controller */}
+              <div className="p-3.5 rounded-2xl bg-[#18181C] border border-white/10 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-[#10B981] animate-ping shrink-0" />
+                    <div>
+                      <p className="text-xs font-bold text-white leading-tight">Multitasking & Background</p>
+                      <p className="text-[10px] text-[#A1A1AA]">Listen while using other apps or lock screen</p>
+                    </div>
                   </div>
                 </div>
-                <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-[#10B981]/20 text-[#34D399] border border-[#10B981]/30">
-                  ON
-                </span>
+
+                <div className="grid grid-cols-2 gap-2 pt-0.5">
+                  {isPipSupported && (
+                    <button
+                      onClick={togglePictureInPicture}
+                      className={`py-2 px-2.5 rounded-xl border text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all ${
+                        isPipActive
+                          ? 'bg-[#10B981] text-black border-[#10B981] shadow-md shadow-[#10B981]/20'
+                          : 'bg-white/5 hover:bg-white/10 border-white/10 text-white'
+                      }`}
+                    >
+                      <Tv className="w-3.5 h-3.5" />
+                      <span>{isPipActive ? 'Floating Active' : 'Float on Apps'}</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={toggleKeepScreenAwake}
+                    className={`py-2 px-2.5 rounded-xl border text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all ${
+                      keepScreenAwake
+                        ? 'bg-amber-400/15 border-amber-400/30 text-amber-300'
+                        : 'bg-white/5 hover:bg-white/10 border-white/10 text-[#A1A1AA]'
+                    }`}
+                  >
+                    <Sun className="w-3.5 h-3.5" />
+                    <span>{keepScreenAwake ? 'Awake: ON' : 'Awake: OFF'}</span>
+                  </button>
+                </div>
               </div>
 
               {/* Next in Queue Preview */}

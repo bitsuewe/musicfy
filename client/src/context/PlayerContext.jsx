@@ -118,7 +118,96 @@ export const PlayerProvider = ({ children }) => {
     } catch (e) {}
   }, []);
 
-  // Media Session API Sync
+  const [keepScreenAwake, setKeepScreenAwake] = useState(true);
+  const [isPipActive, setIsPipActive] = useState(false);
+  const isPipSupported = typeof document !== 'undefined' && 'pictureInPictureEnabled' in document;
+
+  const wakeLockRef = useRef(null);
+
+  // Screen Wake Lock API: Prevents mobile screen from turning off or sleeping during music playback
+  const requestWakeLock = useCallback(async () => {
+    if ('wakeLock' in navigator && keepScreenAwake) {
+      try {
+        if (!wakeLockRef.current) {
+          wakeLockRef.current = await navigator.wakeLock.request('screen');
+          wakeLockRef.current.addEventListener('release', () => {
+            wakeLockRef.current = null;
+          });
+        }
+      } catch (e) {}
+    }
+  }, [keepScreenAwake]);
+
+  const releaseWakeLock = useCallback(async () => {
+    if (wakeLockRef.current) {
+      try {
+        await wakeLockRef.current.release();
+        wakeLockRef.current = null;
+      } catch (e) {}
+    }
+  }, []);
+
+  // Update Picture-in-Picture Canvas Stream
+  const updatePipCanvas = useCallback((track) => {
+    try {
+      const canvas = document.getElementById('musicfy-pip-canvas');
+      const video = document.getElementById('musicfy-pip-video');
+      if (!canvas || !video || !track) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        // Draw background & artwork
+        ctx.fillStyle = '#09090B';
+        ctx.fillRect(0, 0, 512, 512);
+        ctx.drawImage(img, 46, 30, 420, 420);
+
+        // Dark gradient pill
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+        ctx.fillRect(0, 410, 512, 102);
+
+        // Title and artist
+        ctx.fillStyle = '#FAFAFA';
+        ctx.font = 'bold 22px system-ui, -apple-system, sans-serif';
+        ctx.fillText((track.title || 'Track').slice(0, 28), 24, 450);
+
+        ctx.fillStyle = '#10B981';
+        ctx.font = 'bold 16px system-ui, -apple-system, sans-serif';
+        ctx.fillText((track.artistName || 'Artist').slice(0, 32), 24, 485);
+
+        if (!video.srcObject && canvas.captureStream) {
+          video.srcObject = canvas.captureStream(5);
+          video.play().catch(() => {});
+        }
+      };
+      img.src = track.thumbnail || 'https://i.ytimg.com/vi/fHI8X4OXluQ/hqdefault.jpg';
+    } catch (e) {}
+  }, []);
+
+  // Toggle Native Picture-in-Picture Floating Player (Allows cross-app multitasking on iOS/Android)
+  const togglePictureInPicture = async () => {
+    try {
+      const video = document.getElementById('musicfy-pip-video');
+      if (!video) return;
+
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+        setIsPipActive(false);
+      } else if (document.pictureInPictureEnabled && video.requestPictureInPicture) {
+        updatePipCanvas(currentTrackRef.current);
+        await video.play().catch(() => {});
+        await video.requestPictureInPicture();
+        setIsPipActive(true);
+        showToast('Floating Background Player active! You can now switch to other apps.');
+      }
+    } catch (e) {
+      showToast('Floating Player not supported on this browser');
+    }
+  };
+
+  // Media Session API Metadata Sync
   const updateMediaSessionMetadata = useCallback((track) => {
     if (!('mediaSession' in navigator) || !track) return;
     try {
@@ -321,6 +410,8 @@ export const PlayerProvider = ({ children }) => {
             userInitiatedPauseRef.current = false;
             setIsPlaying(true);
             startAudioAnchor();
+            requestWakeLock();
+            updatePipCanvas(currentTrackRef.current);
             updateMediaSessionPlaybackState(true);
             const d = event.target.getDuration();
             if (d) {
@@ -341,6 +432,7 @@ export const PlayerProvider = ({ children }) => {
             } else {
               setIsPlaying(false);
               stopAudioAnchor();
+              releaseWakeLock();
               updateMediaSessionPlaybackState(false);
               stopProgressTimer();
               saveState();
@@ -468,6 +560,8 @@ export const PlayerProvider = ({ children }) => {
     setDuration(track.durationSec || 200);
 
     startAudioAnchor();
+    requestWakeLock();
+    updatePipCanvas(track);
     updateMediaSessionMetadata(track);
     updateMediaSessionPlaybackState(true);
     updateMediaSessionPosition(startTime, track.durationSec || 200);
@@ -504,6 +598,7 @@ export const PlayerProvider = ({ children }) => {
       playerRef.current.pauseVideo();
       setIsPlaying(false);
       stopAudioAnchor();
+      releaseWakeLock();
       updateMediaSessionPlaybackState(false);
       saveState();
     } else {
@@ -511,6 +606,8 @@ export const PlayerProvider = ({ children }) => {
       playerRef.current.playVideo();
       setIsPlaying(true);
       startAudioAnchor();
+      requestWakeLock();
+      updatePipCanvas(currentTrackRef.current);
       updateMediaSessionPlaybackState(true);
     }
   };
@@ -787,6 +884,12 @@ export const PlayerProvider = ({ children }) => {
       showSidePlayer,
       autoPlaySimilar,
       backgroundPlayEnabled: true,
+      keepScreenAwake,
+      setKeepScreenAwake,
+      toggleKeepScreenAwake: () => setKeepScreenAwake(!keepScreenAwake),
+      isPipActive,
+      isPipSupported,
+      togglePictureInPicture,
       playTrack,
       togglePlay,
       playNext,
