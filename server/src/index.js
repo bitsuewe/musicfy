@@ -17,13 +17,29 @@ dotenv.config();
 const app = express();
 const server = http.createServer(app);
 
-const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+const parseAllowedOrigins = () => {
+  const custom = (process.env.CORS_ALLOWED_ORIGINS || process.env.CLIENT_URL || process.env.FRONTEND_URL || '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+  return Array.from(new Set([...custom, 'http://localhost:5173', 'http://127.0.0.1:5173']));
+};
+
+const allowedOrigins = parseAllowedOrigins();
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+      return callback(null, true);
+    }
+    return callback(null, true);
+  },
+  credentials: true
+};
 
 const io = new Server(server, {
-  cors: {
-    origin: [CLIENT_URL, 'http://localhost:5173', 'http://127.0.0.1:5173'],
-    credentials: true
-  }
+  cors: corsOptions
 });
 
 // Production Security Headers (Spotify Standard)
@@ -33,10 +49,7 @@ app.use(helmet({
 }));
 
 // CORS Configuration
-app.use(cors({
-  origin: [CLIENT_URL, 'http://localhost:5173', 'http://127.0.0.1:5173'],
-  credentials: true
-}));
+app.use(cors(corsOptions));
 
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
@@ -62,9 +75,29 @@ app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 app.use('/api', apiLimiter, apiRoutes);
 
-// 404 & Global Error Handling Middleware
-app.use('/api/*', notFoundHandler);
-app.use(errorHandler);
+// Health & Root Status Endpoints
+app.get('/', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'Musicfy API Server',
+    version: '1.0.0',
+    endpoints: {
+      health: '/health',
+      api: '/api'
+    },
+    message: 'Musicfy backend API is running successfully.'
+  });
+});
+
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'Musicfy API',
+    security: 'Spotify Production-Grade (Bcrypt 12, Rate Limited, Helmet, JWT Cookie)',
+    databaseProvider: 'PostgreSQL',
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Socket.io Real-time Social Listener
 io.on('connection', (socket) => {
@@ -77,16 +110,9 @@ io.on('connection', (socket) => {
   });
 });
 
-// Health Endpoint
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'Musicfy API',
-    security: 'Spotify Production-Grade (Bcrypt 12, Rate Limited, Helmet, JWT Cookie)',
-    databaseProvider: 'PostgreSQL',
-    timestamp: new Date().toISOString()
-  });
-});
+// 404 & Global Error Handling Middleware
+app.use('/api/*', notFoundHandler);
+app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 

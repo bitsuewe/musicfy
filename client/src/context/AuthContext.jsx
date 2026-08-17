@@ -29,6 +29,9 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     const res = await api.post('/auth/login', { email, password });
     if (res.data.success && res.data.user) {
+      if (res.data.token) {
+        localStorage.setItem('musicfy_token', res.data.token);
+      }
       setUser(res.data.user);
     }
     return res.data;
@@ -37,6 +40,9 @@ export const AuthProvider = ({ children }) => {
   const register = async (username, email, password) => {
     const res = await api.post('/auth/register', { username, email, password });
     if (res.data.success && res.data.user) {
+      if (res.data.token) {
+        localStorage.setItem('musicfy_token', res.data.token);
+      }
       setUser(res.data.user);
     }
     return res.data;
@@ -48,6 +54,7 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       console.error('Logout error:', err);
     } finally {
+      localStorage.removeItem('musicfy_token');
       setUser(null);
     }
   };
@@ -58,6 +65,7 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       console.error('LogoutAll error:', err);
     } finally {
+      localStorage.removeItem('musicfy_token');
       setUser(null);
     }
   };

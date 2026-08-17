@@ -5,10 +5,11 @@ import { createEmailVerificationToken, verifyEmailToken, createPasswordResetToke
 import { logger } from '../utils/logger.js';
 
 const COOKIE_NAME = 'spicify_session';
+const isProd = process.env.NODE_ENV === 'production';
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax',
+  secure: isProd,
+  sameSite: isProd ? 'none' : 'lax',
   maxAge: 30 * 24 * 60 * 60 * 1000
 };
 
@@ -108,7 +109,8 @@ export const register = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      user: formatSafeUser(user)
+      user: formatSafeUser(user),
+      token: rawToken
     });
   } catch (err) {
     logger.error('Register controller error:', err);
@@ -166,7 +168,8 @@ export const login = async (req, res) => {
 
     return res.json({
       success: true,
-      user: formatSafeUser(user)
+      user: formatSafeUser(user),
+      token: rawToken
     });
   } catch (err) {
     logger.error('Login controller error:', err);

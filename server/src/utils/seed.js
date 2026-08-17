@@ -27,7 +27,7 @@ export async function seed() {
         email: 'admin@musicfy.com',
         passwordHash,
         role: 'ADMIN',
-        avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=MusicfyAdmin',
+        avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=MusicfyAdmin',
         bio: 'Musicfy System Administrator & Music Curator.'
       }
     });
@@ -38,7 +38,7 @@ export async function seed() {
         email: 'alex@musicfy.com',
         passwordHash,
         role: 'USER',
-        avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=Alex',
+        avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Alex',
         bio: 'Synthwave & late night drive music enthusiast.'
       }
     });
@@ -49,7 +49,7 @@ export async function seed() {
         email: 'sam@musicfy.com',
         passwordHash,
         role: 'USER',
-        avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=Sam',
+        avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Sam',
         bio: 'Lo-Fi beats and ambient focus listener.'
       }
     });
