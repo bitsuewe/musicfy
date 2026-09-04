@@ -22,6 +22,7 @@ import {
   Tv,
   Sun
 } from 'lucide-react';
+import DownloadButton from './DownloadButton';
 
 export default function SidePlayer({ onAddToPlaylist }) {
   const {
@@ -134,12 +135,19 @@ export default function SidePlayer({ onAddToPlaylist }) {
                     <Sparkles className="w-3 h-3 text-[#10B981]" />
                     Playing Live
                   </span>
-                  <button
-                    onClick={() => toggleLike(currentTrack)}
-                    className="p-2 rounded-full bg-black/60 backdrop-blur-md text-white hover:text-[#10B981] transition-colors"
-                  >
-                    <Heart className={`w-4 h-4 ${liked ? 'fill-[#10B981] text-[#10B981]' : ''}`} />
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <DownloadButton
+                      track={currentTrack}
+                      size={18}
+                      className="p-2 rounded-full bg-black/60 backdrop-blur-md text-white hover:text-[#10B981]"
+                    />
+                    <button
+                      onClick={() => toggleLike(currentTrack)}
+                      className="p-2 rounded-full bg-black/60 backdrop-blur-md text-white hover:text-[#10B981] transition-colors"
+                    >
+                      <Heart className={`w-4 h-4 ${liked ? 'fill-[#10B981] text-[#10B981]' : ''}`} />
+                    </button>
+                  </div>
                 </div>
               </div>
 

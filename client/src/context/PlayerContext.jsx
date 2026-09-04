@@ -1,6 +1,16 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { registerPlugin, Capacitor } from '@capacitor/core';
 import api from '../services/api';
+import {
+  getOfflineAudioUrl,
+  getAllDownloadedTracks,
+  isTrackDownloaded
+} from '../services/webOfflineStorage';
+import {
+  recordWebTrackListening,
+  recordWebTrackLike,
+  syncWebSmartDownloads
+} from '../services/webSmartDownloadEngine';
 
 const NativeAudio = registerPlugin('NativeAudioPlugin');
 
@@ -317,6 +327,7 @@ export const PlayerProvider = ({ children }) => {
   // Fetch Initial User Likes & Recent Playback History on login/refresh
   useEffect(() => {
     fetchInitialData();
+    syncWebSmartDownloads().catch(() => {});
   }, []);
 
   const fetchInitialData = async () => {
@@ -608,15 +619,83 @@ export const PlayerProvider = ({ children }) => {
       duration: track.durationSec || 200
     });
 
-    if (playerRef.current && playerRef.current.loadVideoById) {
-      playerRef.current.loadVideoById({
-        videoId: track.id,
-        startSeconds: startTime
-      });
-    }
+    recordWebTrackListening(track, false);
+
+    getOfflineAudioUrl(track.id).then((offlineUrl) => {
+      const offlineAudioEl = typeof document !== 'undefined' ? document.getElementById('musicfy-offline-audio') : null;
+      if (offlineUrl && offlineAudioEl) {
+        if (playerRef.current && playerRef.current.pauseVideo) {
+          try { playerRef.current.pauseVideo(); } catch (e) {}
+        }
+        offlineAudioEl.src = offlineUrl;
+        offlineAudioEl.currentTime = startTime;
+        offlineAudioEl.volume = (isMuted ? 0 : volume) / 100;
+        offlineAudioEl.play().catch(() => {});
+        offlineAudioEl.ontimeupdate = () => {
+          const t = Math.round(offlineAudioEl.currentTime);
+          setCurrentTime(t);
+          saveState({ currentTime: t });
+          updateMediaSessionPosition(t, durationRef.current);
+        };
+        offlineAudioEl.onloadedmetadata = () => {
+          if (offlineAudioEl.duration) {
+            const d = Math.round(offlineAudioEl.duration);
+            setDuration(d);
+            updateMediaSessionPosition(startTime, d);
+          }
+        };
+        offlineAudioEl.onended = () => {
+          recordWebTrackListening(track, true);
+          handleTrackEnded();
+        };
+        offlineAudioEl.onplay = () => {
+          setIsPlaying(true);
+          updateMediaSessionPlaybackState(true);
+        };
+        offlineAudioEl.onpause = () => {
+          if (userInitiatedPauseRef.current) {
+            setIsPlaying(false);
+            updateMediaSessionPlaybackState(false);
+          }
+        };
+      } else {
+        if (offlineAudioEl) {
+          offlineAudioEl.pause();
+          offlineAudioEl.src = '';
+        }
+        if (playerRef.current && playerRef.current.loadVideoById) {
+          playerRef.current.loadVideoById({
+            videoId: track.id,
+            startSeconds: startTime
+          });
+        }
+      }
+    });
   };
 
   const togglePlay = () => {
+    const offlineAudioEl = typeof document !== 'undefined' ? document.getElementById('musicfy-offline-audio') : null;
+    if (offlineAudioEl && offlineAudioEl.src && offlineAudioEl.src.startsWith('blob:')) {
+      if (isPlaying) {
+        userInitiatedPauseRef.current = true;
+        offlineAudioEl.pause();
+        setIsPlaying(false);
+        stopAudioAnchor();
+        releaseWakeLock();
+        updateMediaSessionPlaybackState(false);
+        saveState();
+      } else {
+        userInitiatedPauseRef.current = false;
+        offlineAudioEl.play().catch(() => {});
+        setIsPlaying(true);
+        startAudioAnchor();
+        requestWakeLock();
+        updatePipCanvas(currentTrackRef.current);
+        updateMediaSessionPlaybackState(true);
+      }
+      return;
+    }
+
     if (!playerRef.current) return;
     if (isPlaying) {
       userInitiatedPauseRef.current = true;
@@ -696,6 +775,15 @@ export const PlayerProvider = ({ children }) => {
 
   const seekTo = (seconds) => {
     const sec = Math.max(0, Math.min(durationRef.current, Math.round(seconds)));
+    const offlineAudioEl = typeof document !== 'undefined' ? document.getElementById('musicfy-offline-audio') : null;
+    if (offlineAudioEl && offlineAudioEl.src && offlineAudioEl.src.startsWith('blob:')) {
+      offlineAudioEl.currentTime = sec;
+      setCurrentTime(sec);
+      saveState({ currentTime: sec });
+      updateMediaSessionPosition(sec, durationRef.current);
+      return;
+    }
+
     if (playerRef.current && playerRef.current.seekTo) {
       playerRef.current.seekTo(sec, true);
       setCurrentTime(sec);
@@ -707,6 +795,9 @@ export const PlayerProvider = ({ children }) => {
   const setVolumeLevel = (val) => {
     setVolume(val);
     saveState({ volume: val });
+    const offlineAudioEl = typeof document !== 'undefined' ? document.getElementById('musicfy-offline-audio') : null;
+    if (offlineAudioEl) offlineAudioEl.volume = val / 100;
+
     if (playerRef.current && playerRef.current.setVolume) {
       playerRef.current.setVolume(val);
       if (val === 0) setIsMuted(true);
@@ -715,6 +806,9 @@ export const PlayerProvider = ({ children }) => {
   };
 
   const toggleMute = () => {
+    const offlineAudioEl = typeof document !== 'undefined' ? document.getElementById('musicfy-offline-audio') : null;
+    if (offlineAudioEl) offlineAudioEl.muted = !isMuted;
+
     if (!playerRef.current) return;
     if (isMuted) {
       playerRef.current.unMute();
@@ -909,6 +1003,8 @@ export const PlayerProvider = ({ children }) => {
     }
 
     setLikedTrackIds(updatedLikes);
+    recordWebTrackLike(track, !isCurrentlyLiked);
+
     try {
       localStorage.setItem(LIKES_KEY, JSON.stringify(savedList));
     } catch (e) {}
@@ -921,6 +1017,18 @@ export const PlayerProvider = ({ children }) => {
   };
 
   const isLiked = (trackId) => likedTrackIds.has(trackId);
+
+  const playOfflineQueue = async (onlySmart = false) => {
+    try {
+      const { manualTracks, autoCachedTracks, allTracks } = await getAllDownloadedTracks();
+      const list = onlySmart ? autoCachedTracks : allTracks;
+      if (list && list.length > 0) {
+        playTrack(list[0], list);
+      } else {
+        showToast('No offline tracks available yet. Tap download on any song!');
+      }
+    } catch (e) {}
+  };
 
   return (
     <PlayerContext.Provider value={{
@@ -953,6 +1061,7 @@ export const PlayerProvider = ({ children }) => {
       seekTo,
       setVolumeLevel,
       toggleMute,
+      playOfflineQueue,
       setShuffle: () => {
         const next = !shuffle;
         setShuffle(next);

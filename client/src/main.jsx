@@ -9,10 +9,14 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   </React.StrictMode>,
 )
 
-// Register lightweight service worker for PWA & background audio resiliency
-if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+// Register Service Worker for offline PWA caching
+if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+    navigator.serviceWorker.register('/sw.js').then((reg) => {
+      console.log('Musicfy Offline Service Worker registered:', reg.scope);
+    }).catch((err) => {
+      console.log('Service Worker registration note:', err);
+    });
   });
 }
 

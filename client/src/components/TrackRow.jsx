@@ -1,6 +1,7 @@
 import React from 'react';
 import { Play, Pause, Heart, Plus, ListPlus } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
+import DownloadButton from './DownloadButton';
 
 export default function TrackRow({ index, track, onAddToPlaylist, onRemove }) {
   const { currentTrack, isPlaying, playTrack, togglePlay, toggleLike, isLiked, addToQueue } = usePlayer();
@@ -68,6 +69,8 @@ export default function TrackRow({ index, track, onAddToPlaylist, onRemove }) {
         >
           <ListPlus className="w-4 h-4" />
         </button>
+
+        <DownloadButton track={track} size={15} />
 
         <button
           onClick={(e) => { e.stopPropagation(); toggleLike(track); }}

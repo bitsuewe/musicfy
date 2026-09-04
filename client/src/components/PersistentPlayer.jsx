@@ -21,6 +21,7 @@ import {
   Tv,
   Sun
 } from 'lucide-react';
+import DownloadButton from './DownloadButton';
 
 export default function PersistentPlayer() {
   const { user } = useAuth();
@@ -226,6 +227,9 @@ export default function PersistentPlayer() {
               </span>
             )}
 
+            {/* Download Offline Button */}
+            <DownloadButton track={currentTrack} size={15} className="text-[#8E8E93] hover:text-white" />
+
             {/* Options Menu Button (...) */}
             <div className="relative shrink-0">
               <button
@@ -392,6 +396,9 @@ export default function PersistentPlayer() {
                   <span>{isPipActive ? 'Floating Active' : 'Float on Apps (PiP)'}</span>
                 </button>
               )}
+              <div className="p-1 rounded-full bg-white/10 border border-white/15 backdrop-blur-md shadow-md flex items-center justify-center">
+                <DownloadButton track={currentTrack} size={18} className="text-white hover:text-[#10B981]" />
+              </div>
               <button
                 onClick={toggleKeepScreenAwake}
                 className={`p-2 rounded-full transition-all shadow-md backdrop-blur-md border ${

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Play, Pause, Heart, Plus, ListPlus } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
+import DownloadButton from './DownloadButton';
 
 export default function TrackCard({ track, onAddToPlaylist }) {
   const { currentTrack, isPlaying, playTrack, togglePlay, toggleLike, isLiked, addToQueue } = usePlayer();
@@ -54,6 +55,7 @@ export default function TrackCard({ track, onAddToPlaylist }) {
           >
             <ListPlus className="w-4 h-4" />
           </button>
+          <DownloadButton track={track} size={15} className="bg-black/60 text-white" />
           <button
             onClick={(e) => { e.stopPropagation(); toggleLike(track); }}
             className="p-1.5 rounded-full bg-black/60 text-white hover:text-[#1DB954] transition-colors"

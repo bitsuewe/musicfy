@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { PlayerProvider } from './context/PlayerContext';
+import { WifiOff } from 'lucide-react';
 
 import Sidebar from './components/Sidebar';
 import SidePlayer from './components/SidePlayer';
@@ -29,7 +30,21 @@ function AppContent() {
   const [showCreatePlaylistModal, setShowCreatePlaylistModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [targetTrackForPlaylist, setTargetTrackForPlaylist] = useState(null);
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const handlePlaylistCreated = (newPlaylist) => {
     if (newPlaylist && newPlaylist.id) {
@@ -40,13 +55,23 @@ function AppContent() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#09090B] text-[#FAFAFA] antialiased select-none">
       
-      {/* YouTube IFrame Container, Mobile Background Audio Keeper & PiP Carrier */}
+      {/* Offline Status Pill Banner */}
+      {!isOnline && (
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 bg-[#1C1C1E]/95 border border-[#10B981]/40 text-white px-3.5 py-1.5 rounded-full shadow-2xl backdrop-blur-xl flex items-center gap-2 text-xs font-semibold animate-pulse">
+          <WifiOff className="w-3.5 h-3.5 text-[#10B981]" />
+          <span>Offline Mode Active • Playing from local downloads</span>
+        </div>
+      )}
+
+      {/* YouTube IFrame Container, Mobile Background Audio Keeper, Offline Audio Player & PiP Carrier */}
       <div 
         aria-hidden="true" 
         className="fixed bottom-0 right-0 w-[1px] h-[1px] pointer-events-none opacity-[0.001] overflow-hidden -z-50"
         style={{ transform: 'translateZ(0)' }}
       >
         <div id="musicfy-yt-player-iframe" />
+        {/* Offline Audio Player Engine */}
+        <audio id="musicfy-offline-audio" playsInline preload="auto" />
         {/* Silent HTML5 audio keeper: enables iOS AVAudioSession and Android AudioFocus background lockscreen audio */}
         <audio
           id="musicfy-bg-audio-anchor"
