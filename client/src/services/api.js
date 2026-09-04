@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const getBaseUrl = () => {
   const envUrl = import.meta.env.VITE_API_URL;
-  if (!envUrl) return '/api';
+  if (!envUrl) return 'https://musicfy-thjc.onrender.com/api';
   
   const trimmed = envUrl.trim().replace(/\/+$/, '');
   if (!trimmed.endsWith('/api') && trimmed.startsWith('http')) {

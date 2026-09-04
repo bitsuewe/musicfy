@@ -1,5 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import { registerPlugin, Capacitor } from '@capacitor/core';
 import api from '../services/api';
+
+const NativeAudio = registerPlugin('NativeAudioPlugin');
 
 const PlayerContext = createContext(null);
 
@@ -207,8 +210,19 @@ export const PlayerProvider = ({ children }) => {
     }
   };
 
-  // Media Session API Metadata Sync
+  // Media Session & Native Android Foreground Notification Sync
   const updateMediaSessionMetadata = useCallback((track) => {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        NativeAudio.updateTrackInfo({
+          title: track?.title || 'Musicfy',
+          artist: track?.artistName || 'Playing Music',
+          artwork: track?.thumbnail || 'https://i.ytimg.com/vi/fHI8X4OXluQ/hqdefault.jpg',
+          isPlaying: true
+        }).catch(() => {});
+      } catch (e) {}
+    }
+
     if (!('mediaSession' in navigator) || !track) return;
     try {
       const artworkUrl = track.thumbnail || 'https://i.ytimg.com/vi/fHI8X4OXluQ/hqdefault.jpg';
@@ -229,6 +243,17 @@ export const PlayerProvider = ({ children }) => {
   }, []);
 
   const updateMediaSessionPlaybackState = useCallback((playing) => {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        NativeAudio.updateTrackInfo({
+          title: currentTrackRef.current?.title || 'Musicfy',
+          artist: currentTrackRef.current?.artistName || 'Playing Music',
+          artwork: currentTrackRef.current?.thumbnail || 'https://i.ytimg.com/vi/fHI8X4OXluQ/hqdefault.jpg',
+          isPlaying: !!playing
+        }).catch(() => {});
+      } catch (e) {}
+    }
+
     if ('mediaSession' in navigator) {
       try {
         navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
@@ -802,6 +827,37 @@ export const PlayerProvider = ({ children }) => {
       window.removeEventListener('pagehide', handleVisibilityChange);
     };
   }, [startAudioAnchor, updateMediaSessionPlaybackState, updateMediaSessionPosition]);
+
+  // Native Android Media Notification & Lock Screen Action Listener
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let listenerHandle = null;
+    try {
+      NativeAudio.addListener('mediaAction', (data) => {
+        if (!data || !data.action) return;
+        if (data.action === 'play') {
+          if (!isPlayingRef.current) togglePlay();
+        } else if (data.action === 'pause') {
+          if (isPlayingRef.current) togglePlay();
+        } else if (data.action === 'next') {
+          playNext();
+        } else if (data.action === 'prev') {
+          playPrev();
+        } else if (data.action === 'seek' && typeof data.position === 'number') {
+          seekTo(data.position);
+        }
+      }).then(handle => {
+        listenerHandle = handle;
+      }).catch(() => {});
+    } catch (e) {}
+
+    return () => {
+      if (listenerHandle && listenerHandle.remove) {
+        listenerHandle.remove();
+      }
+    };
+  }, [togglePlay, playNext, playPrev, seekTo]);
 
   const addToQueue = (track) => {
     if (!track || !track.id) return;

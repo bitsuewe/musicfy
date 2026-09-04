@@ -1,5 +1,6 @@
 import { searchYouTubeTracks, getTrendingTracks, getArtistProfile } from '../services/youtubeService.js';
 import { getPersonalizedRecommendations } from '../services/recommendationService.js';
+import { pipeAudioStream } from '../services/audioStreamService.js';
 import { prisma } from '../config/db.js';
 
 export const searchMusic = async (req, res) => {
@@ -69,3 +70,34 @@ export const getRecommendations = async (req, res) => {
     return res.status(500).json({ error: 'Failed to fetch recommendations' });
   }
 };
+
+export const streamTrack = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || !id.trim()) {
+      return res.status(400).json({ error: 'Track ID is required' });
+    }
+    await pipeAudioStream(id.trim(), res, false);
+  } catch (err) {
+    console.error('Stream track error:', err);
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Stream failed' });
+    }
+  }
+};
+
+export const downloadTrack = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || !id.trim()) {
+      return res.status(400).json({ error: 'Track ID is required' });
+    }
+    await pipeAudioStream(id.trim(), res, true);
+  } catch (err) {
+    console.error('Download track error:', err);
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Download failed' });
+    }
+  }
+};
+

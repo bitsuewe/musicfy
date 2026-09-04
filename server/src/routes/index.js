@@ -22,11 +22,13 @@ router.post('/auth/forgot-password', authController.forgotPassword);
 router.post('/auth/reset-password', authController.resetPassword);
 router.post('/auth/change-password', requireAuth, authController.changePassword);
 
-// Music Discovery Endpoints
+// Music Discovery & Streaming Endpoints
 router.get('/music/search', musicController.searchMusic);
 router.get('/music/trending', musicController.getTrending);
 router.get('/music/artist/:id', musicController.getArtist);
 router.get('/music/recommendations', optionalAuth, musicController.getRecommendations);
+router.get('/music/stream/:id', musicController.streamTrack);
+router.get('/music/download/:id', musicController.downloadTrack);
 
 // Playlist Endpoints
 router.get('/playlists', optionalAuth, playlistController.getPlaylists);
