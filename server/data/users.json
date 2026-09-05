@@ -1,0 +1,12 @@
+[
+  {
+    "id": "usr_1788610202208_nownp7",
+    "username": "flowuser_1788610199775",
+    "email": "flow_test_1788610199775@musicfy.app",
+    "passwordHash": "$2b$12$CwzKpQaP7VMsvTqInRdL/OZspPSXnG2BpjNe/C2GAjkCm7JCWaebm",
+    "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=flowuser_1788610199775",
+    "emailVerified": false,
+    "role": "USER",
+    "createdAt": "2026-09-05T12:10:02.209Z"
+  }
+]

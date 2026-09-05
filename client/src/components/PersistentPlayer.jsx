@@ -34,7 +34,6 @@ export default function PersistentPlayer() {
     isMuted,
     shuffle,
     repeatMode,
-    toastMessage,
     togglePlay,
     playNext,
     playPrev,
@@ -75,14 +74,6 @@ export default function PersistentPlayer() {
 
   return (
     <>
-      {/* Toast Alert */}
-      {toastMessage && (
-        <div className="fixed bottom-24 sm:bottom-20 right-4 sm:right-6 z-50 bg-[#1C1C1E]/95 border border-white/20 text-white px-3.5 py-2 rounded-2xl shadow-2xl backdrop-blur-2xl flex items-center gap-2 text-xs font-semibold animate-bounce max-w-[85vw]">
-          <span className="w-2 h-2 rounded-full bg-[#10B981] animate-ping shrink-0" />
-          <span className="truncate">{toastMessage}</span>
-        </div>
-      )}
-
       {/* Apple Music Floating Up Next / Queue Drawer */}
       {showQueue && (
         <div className="fixed bottom-28 sm:bottom-16 right-3 sm:right-6 z-40 w-[calc(100%-1.5rem)] sm:w-80 max-h-[380px] bg-[#1F1F22]/95 border border-white/15 rounded-2xl p-4 shadow-2xl backdrop-blur-3xl flex flex-col animate-fadeIn">

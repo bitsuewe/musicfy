@@ -80,6 +80,7 @@ export const PlayerProvider = ({ children }) => {
   const [likedTrackIds, setLikedTrackIds] = useState(new Set(savedLikes.map(t => t.id)));
   const [recentlyPlayed, setRecentlyPlayed] = useState(savedRecents);
   const [toastMessage, setToastMessage] = useState(null);
+  const toastTimeoutRef = useRef(null);
   const [showSidePlayer, setShowSidePlayer] = useState(false);
   const [autoPlaySimilar, setAutoPlaySimilar] = useState(true);
 
@@ -562,8 +563,14 @@ export const PlayerProvider = ({ children }) => {
   };
 
   const showToast = (msg) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastMessage(null);
+      toastTimeoutRef.current = null;
+    }, 2800);
   };
 
   const playTrack = (track, newQueue = null, startTime = 0) => {

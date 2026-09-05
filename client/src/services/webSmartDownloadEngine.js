@@ -6,88 +6,7 @@ import {
   getOfflineSettings
 } from './webOfflineStorage';
 
-const CURATED_POPULAR_SEEDS = [
-  {
-    id: "fHI8X4OXluQ",
-    title: "Blinding Lights",
-    artistName: "The Weeknd",
-    thumbnail: "https://i.ytimg.com/vi/fHI8X4OXluQ/hqdefault.jpg",
-    durationSec: 200,
-    category: "Synthwave"
-  },
-  {
-    id: "34Na4j8AVgA",
-    title: "Starboy",
-    artistName: "The Weeknd",
-    thumbnail: "https://i.ytimg.com/vi/34Na4j8AVgA/hqdefault.jpg",
-    durationSec: 230,
-    category: "Pop"
-  },
-  {
-    id: "XXYlFuWEuKI",
-    title: "Save Your Tears",
-    artistName: "The Weeknd",
-    thumbnail: "https://i.ytimg.com/vi/XXYlFuWEuKI/hqdefault.jpg",
-    durationSec: 215,
-    category: "Synthpop"
-  },
-  {
-    id: "H5v3kku4y6Q",
-    title: "As It Was",
-    artistName: "Harry Styles",
-    thumbnail: "https://i.ytimg.com/vi/H5v3kku4y6Q/hqdefault.jpg",
-    durationSec: 167,
-    category: "Pop"
-  },
-  {
-    id: "TUVcZfQe-Kw",
-    title: "Levitating",
-    artistName: "Dua Lipa",
-    thumbnail: "https://i.ytimg.com/vi/TUVcZfQe-Kw/hqdefault.jpg",
-    durationSec: 203,
-    category: "Disco"
-  },
-  {
-    id: "kTJczUoc26U",
-    title: "STAY",
-    artistName: "The Kid LAROI, Justin Bieber",
-    thumbnail: "https://i.ytimg.com/vi/kTJczUoc26U/hqdefault.jpg",
-    durationSec: 141,
-    category: "Pop"
-  },
-  {
-    id: "kJQP7kiw5Fk",
-    title: "Despacito",
-    artistName: "Luis Fonsi ft. Daddy Yankee",
-    thumbnail: "https://i.ytimg.com/vi/kJQP7kiw5Fk/hqdefault.jpg",
-    durationSec: 228,
-    category: "Latin"
-  },
-  {
-    id: "09R8_2nJtjg",
-    title: "Sugar",
-    artistName: "Maroon 5",
-    thumbnail: "https://i.ytimg.com/vi/09R8_2nJtjg/hqdefault.jpg",
-    durationSec: 235,
-    category: "Pop"
-  },
-  {
-    id: "JGwWNGJdvx8",
-    title: "Shape of You",
-    artistName: "Ed Sheeran",
-    thumbnail: "https://i.ytimg.com/vi/JGwWNGJdvx8/hqdefault.jpg",
-    durationSec: 233,
-    category: "Acoustic"
-  },
-  {
-    id: "RgKAFK5djSk",
-    title: "See You Again",
-    artistName: "Wiz Khalifa ft. Charlie Puth",
-    thumbnail: "https://i.ytimg.com/vi/RgKAFK5djSk/hqdefault.jpg",
-    durationSec: 230,
-    category: "Hip-Hop"
-  }
-];
+
 
 export const recordWebTrackListening = async (track, completed = false) => {
   const trackId = track?.id || track?._id || track?.trackId || track?.videoId;
@@ -200,73 +119,57 @@ export const syncWebSmartDownloads = async () => {
       req.onerror = () => resolve([]);
     });
 
-    const targetLimit = Math.max(5, Number(settings.smartDownloadLimit) || 50);
+    const { allTracks, autoCachedTracks } = await getAllDownloadedTracks();
 
-    // 1. Collect user listening affinity candidates
-    const candidateMap = new Map();
-
-    const ranked = allStats.map((item) => ({
-      ...item,
-      score: calculateAffinityScore(item)
-    })).sort((a, b) => b.score - a.score);
-
-    ranked.forEach((item) => {
-      if (item.track && item.id) {
-        candidateMap.set(String(item.id), item.track);
+    // Clean up any previously auto-cached tracks that user never actually listened to (e.g. legacy pop seeds)
+    if (autoCachedTracks.length > 0) {
+      for (const autoTrack of autoCachedTracks) {
+        const match = allStats.find((s) => String(s.id) === String(autoTrack.id));
+        if (!match || (Number(match.playCount) || 0) < 1) {
+          await removeTrackDownload(autoTrack.id);
+        }
       }
+    }
+
+    // Do NOT auto-download on first login or for brand new accounts with no listening history
+    // Require user to have listened to multiple tracks first
+    if (!allStats || allStats.length < 3) {
+      return;
+    }
+
+    // Only qualify tracks that the user actually listens to often:
+    // - Played at least 2 times, OR
+    // - Liked and played at least once, OR
+    // - Completed full playback at least twice
+    const frequentItems = allStats.filter((item) => {
+      const plays = Number(item.playCount) || 0;
+      const completions = Number(item.completionCount) || 0;
+      const isLiked = Boolean(item.liked);
+      return plays >= 2 || (isLiked && plays >= 1) || completions >= 2;
     });
 
-    // 2. If stats have fewer than targetLimit, pull from Liked Songs
-    if (candidateMap.size < targetLimit) {
-      try {
-        const rawLikes = localStorage.getItem('spicify_user_liked_tracks');
-        if (rawLikes) {
-          const likedTracks = JSON.parse(rawLikes);
-          if (Array.isArray(likedTracks)) {
-            for (const t of likedTracks) {
-              if (t && t.id && !candidateMap.has(String(t.id))) {
-                candidateMap.set(String(t.id), t);
-                if (candidateMap.size >= targetLimit) break;
-              }
-            }
-          }
-        }
-      } catch (e) {}
+    if (frequentItems.length === 0) {
+      return;
     }
 
-    // 3. Pull from Recent Songs
-    if (candidateMap.size < targetLimit) {
-      try {
-        const rawRecents = localStorage.getItem('spicify_user_recent_tracks');
-        if (rawRecents) {
-          const recentTracks = JSON.parse(rawRecents);
-          if (Array.isArray(recentTracks)) {
-            for (const t of recentTracks) {
-              if (t && t.id && !candidateMap.has(String(t.id))) {
-                candidateMap.set(String(t.id), t);
-                if (candidateMap.size >= targetLimit) break;
-              }
-            }
-          }
-        }
-      } catch (e) {}
-    }
+    const targetLimit = Math.max(5, Number(settings.smartDownloadLimit) || 20);
 
-    // 4. Seed with Curated Popular Tracks
-    if (candidateMap.size < targetLimit) {
-      for (const t of CURATED_POPULAR_SEEDS) {
-        if (!candidateMap.has(String(t.id))) {
-          candidateMap.set(String(t.id), t);
-          if (candidateMap.size >= targetLimit) break;
-        }
-      }
-    }
+    // Rank candidate tracks by true affinity score
+    const ranked = frequentItems
+      .map((item) => ({
+        ...item,
+        score: calculateAffinityScore(item)
+      }))
+      .sort((a, b) => b.score - a.score);
 
-    const topCandidates = Array.from(candidateMap.values()).slice(0, targetLimit);
-    const { allTracks, autoCachedTracks } = await getAllDownloadedTracks();
+    const topCandidates = ranked
+      .filter((item) => item.track && item.id)
+      .slice(0, targetLimit)
+      .map((item) => item.track);
+
     const downloadedIds = new Set(allTracks.map((t) => String(t.id)));
 
-    // Download missing top tracks in background
+    // Download genuine top affinity songs silently in background
     for (const track of topCandidates) {
       const tid = String(track.id || track._id || track.videoId);
       if (!downloadedIds.has(tid)) {
@@ -274,7 +177,7 @@ export const syncWebSmartDownloads = async () => {
       }
     }
 
-    // Evict lowest scoring auto-cached tracks if over limit
+    // Evict lowest scoring auto-cached tracks if over user's limit
     if (autoCachedTracks.length > targetLimit) {
       const scored = autoCachedTracks.map((t) => {
         const match = allStats.find((s) => s.id === t.id);
@@ -293,3 +196,4 @@ export const syncWebSmartDownloads = async () => {
     console.warn('Smart download sync error:', e);
   }
 };
+

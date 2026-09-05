@@ -55,7 +55,6 @@ export default function DownloadButton({
 
     try {
       setIsDownloading(true);
-      showToast(`Downloading "${track.title || 'song'}" for offline playback...`);
       const success = await downloadTrackOffline(track, true);
       if (success) {
         setIsDownloaded(true);

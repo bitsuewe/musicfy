@@ -21,7 +21,6 @@ import { useAuth } from '../context/AuthContext';
 import { usePlayer } from '../context/PlayerContext';
 import TrackCard from '../components/TrackCard';
 import OfflineNotice from '../components/OfflineNotice';
-import { getAllDownloadedTracks } from '../services/webOfflineStorage';
 import api from '../services/api';
 
 const MOOD_CHIPS = [
@@ -41,7 +40,6 @@ export default function Home({ onAddToPlaylist }) {
   const [recs, setRecs] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
-  const [offlineDownloads, setOfflineDownloads] = useState([]);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -61,9 +59,6 @@ export default function Home({ onAddToPlaylist }) {
 
   useEffect(() => {
     fetchHomeData();
-    getAllDownloadedTracks().then(data => {
-      setOfflineDownloads(data.allTracks || []);
-    }).catch(() => {});
   }, [user]);
 
   const fetchHomeData = async () => {
@@ -224,37 +219,6 @@ export default function Home({ onAddToPlaylist }) {
           title="You're offline"
           description="Showing your downloaded music available without an internet connection."
         />
-      )}
-
-      {/* 📥 Offline Downloads Quick Access Shelf */}
-      {offlineDownloads.length > 0 && (
-        <section className="space-y-4 bg-gradient-to-r from-[#131b17] to-[#121216] border border-[#10B981]/25 p-5 rounded-3xl shadow-lg animate-fadeIn">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#10B981] animate-pulse" />
-              <div>
-                <h2 className="text-lg sm:text-xl font-black text-white tracking-tight">
-                  {isOnline ? "Downloaded & Ready Offline" : "Your Offline Downloads"}
-                </h2>
-                <p className="text-[11px] text-[#A1A1AA] font-medium">
-                  {offlineDownloads.length} songs saved to this device • 0 data usage
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => playTrack(offlineDownloads[0], offlineDownloads)}
-              className="px-3.5 py-2 rounded-xl bg-[#10B981] hover:bg-[#059669] text-black font-extrabold text-xs flex items-center gap-1.5 shadow-md shadow-[#10B981]/20 hover:scale-105 active:scale-95 transition-all"
-            >
-              <Play className="w-3.5 h-3.5 fill-black" />
-              <span>Play All</span>
-            </button>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
-            {offlineDownloads.slice(0, 6).map((track) => (
-              <TrackCard key={`home-dl-${track.id}`} track={track} onAddToPlaylist={onAddToPlaylist} />
-            ))}
-          </div>
-        </section>
       )}
 
       {/* 🌟 1. Header & Dynamic Mood Filter Tabs */}

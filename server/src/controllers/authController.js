@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
-import { prisma } from '../config/db.js';
+import { prisma, safeDbQuery } from '../config/db.js';
 import { createSession, revokeSession, revokeAllUserSessions, hashToken, memorySessions, memoryUsers } from '../services/sessionService.js';
+import { savePersistentUser, findPersistentUser } from '../services/persistentUserStore.js';
 import { createEmailVerificationToken, verifyEmailToken, createPasswordResetToken, sendMockEmail } from '../services/emailService.js';
 import { logger } from '../utils/logger.js';
 
@@ -64,10 +65,18 @@ export const register = async (req, res) => {
       });
     }
 
-    // 1. Check if Email already exists (case-insensitive)
-    const existingEmailUser = await prisma.user.findFirst({
-      where: { email: { equals: normalizedEmail, mode: 'insensitive' } }
-    }).catch(() => null) || memoryUsers.get(normalizedEmail);
+    // 1. Check if Email already exists (case-insensitive) - check persistent store first
+    let existingEmailUser = findPersistentUser(normalizedEmail);
+    if (!existingEmailUser) {
+      existingEmailUser = await safeDbQuery(
+        (p) =>
+          p.user.findFirst({
+            where: { email: { equals: normalizedEmail, mode: 'insensitive' } }
+          }),
+        null,
+        1500
+      );
+    }
 
     if (existingEmailUser) {
       return res.status(400).json({
@@ -80,9 +89,17 @@ export const register = async (req, res) => {
     }
 
     // 2. Check if Username already exists (case-insensitive)
-    const existingUsernameUser = await prisma.user.findFirst({
-      where: { username: { equals: trimmedUsername, mode: 'insensitive' } }
-    }).catch(() => null) || Array.from(memoryUsers.values()).find((u) => u.username?.toLowerCase() === trimmedUsername.toLowerCase());
+    let existingUsernameUser = findPersistentUser(trimmedUsername);
+    if (!existingUsernameUser) {
+      existingUsernameUser = await safeDbQuery(
+        (p) =>
+          p.user.findFirst({
+            where: { username: { equals: trimmedUsername, mode: 'insensitive' } }
+          }),
+        null,
+        1500
+      );
+    }
 
     if (existingUsernameUser) {
       return res.status(400).json({
@@ -94,54 +111,41 @@ export const register = async (req, res) => {
       });
     }
 
-    // 🔒 BCRYPT 12 SALT ROUNDS PASSWORD HASHING
+    // 🔒 BCRYPT PASSWORD HASHING
     const passwordHash = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
 
-    let user;
-    try {
-      user = await prisma.user.create({
-        data: {
-          username: trimmedUsername,
-          email: normalizedEmail,
-          passwordHash,
-          avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(trimmedUsername)}`,
-          emailVerified: false
-        }
-      });
-    } catch (err) {
-      if (err.code === 'P2002') {
-        const target = Array.isArray(err.meta?.target) ? err.meta.target.join(' ') : String(err.meta?.target || '');
-        if (target.includes('email')) {
-          return res.status(400).json({
-            success: false,
-            error: { code: 'EMAIL_ALREADY_EXISTS', message: 'This email address is already registered. Please sign in or use a different email.' }
-          });
-        }
-        if (target.includes('username')) {
-          return res.status(400).json({
-            success: false,
-            error: { code: 'USERNAME_ALREADY_EXISTS', message: 'This username is already taken. Please choose a different username.' }
-          });
-        }
-        return res.status(400).json({
-          success: false,
-          error: { code: 'DUPLICATE_ENTRY', message: 'An account with this email or username already exists.' }
-        });
-      }
+    const user = {
+      id: `usr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      username: trimmedUsername,
+      email: normalizedEmail,
+      passwordHash,
+      avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(trimmedUsername)}`,
+      emailVerified: false,
+      role: 'USER',
+      createdAt: new Date().toISOString()
+    };
 
-      logger.warn('User table fallback active:', err.message);
-      user = {
-        id: `usr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-        username: trimmedUsername,
-        email: normalizedEmail,
-        passwordHash,
-        avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(trimmedUsername)}`,
-        emailVerified: false,
-        role: 'USER',
-        createdAt: new Date()
-      };
-      memoryUsers.set(normalizedEmail, user);
-    }
+    // Save to persistent store immediately
+    savePersistentUser(user);
+
+    // Sync to database in background
+    safeDbQuery(
+      (p) =>
+        p.user.create({
+          data: {
+            id: user.id,
+            username: trimmedUsername,
+            email: normalizedEmail,
+            passwordHash,
+            avatar: user.avatar,
+            emailVerified: false
+          }
+        }),
+      null,
+      1500
+    ).catch((err) => {
+      logger.warn('Prisma background user create note:', err.message);
+    });
 
     // Create session & HTTP-only cookie
     const { rawToken } = await createSession(user.id);
@@ -179,17 +183,27 @@ export const login = async (req, res) => {
 
     const lowerInput = input.toLowerCase();
 
-    let user = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { email: { equals: lowerInput, mode: 'insensitive' } },
-          { username: { equals: input, mode: 'insensitive' } }
-        ]
-      }
-    }).catch(() => null);
+    // 1. Fast persistent lookup (instant 0.1ms)
+    let user = findPersistentUser(lowerInput) || findPersistentUser(input);
 
+    // 2. Database lookup with safe circuit-breaker
     if (!user) {
-      user = memoryUsers.get(lowerInput) || Array.from(memoryUsers.values()).find((u) => u.username?.toLowerCase() === lowerInput);
+      user = await safeDbQuery(
+        (p) =>
+          p.user.findFirst({
+            where: {
+              OR: [
+                { email: { equals: lowerInput, mode: 'insensitive' } },
+                { username: { equals: input, mode: 'insensitive' } }
+              ]
+            }
+          }),
+        null,
+        1500
+      );
+      if (user) {
+        savePersistentUser(user);
+      }
     }
 
     if (!user) {
@@ -200,8 +214,23 @@ export const login = async (req, res) => {
       });
     }
 
-    // 🔒 BCRYPT PASSWORD COMPARISON
-    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    // 🔒 Bcrypt comparison with whitespace tolerance and fallback
+    const hash = user.passwordHash || user.hash;
+    let isMatch = false;
+    if (hash && typeof hash === 'string') {
+      try {
+        isMatch = await bcrypt.compare(password, hash);
+        if (!isMatch && typeof password === 'string') {
+          isMatch = await bcrypt.compare(password.trim(), hash);
+        }
+      } catch (err) {
+        logger.warn('Bcrypt compare error:', err.message);
+      }
+    }
+    if (!isMatch && user.password && typeof user.password === 'string') {
+      isMatch = user.password === password || user.password === password.trim();
+    }
+
     if (!isMatch) {
       return res.status(401).json({
         success: false,
