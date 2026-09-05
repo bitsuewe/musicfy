@@ -24,7 +24,7 @@ import {
 import DownloadButton from './DownloadButton';
 
 export default function PersistentPlayer() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const {
     currentTrack,
     isPlaying,
@@ -211,8 +211,8 @@ export default function PersistentPlayer() {
               </div>
             </div>
 
-            {/* PREVIEW Pill Badge — ONLY shown when user is NOT signed in */}
-            {!user && (
+            {/* PREVIEW Pill Badge — ONLY shown when user is confirmed NOT signed in */}
+            {!user && !authLoading && (
               <span className="hidden lg:inline-block px-1.5 py-0.5 rounded text-[8.5px] font-bold tracking-wider text-[#A1A1A6] bg-white/10 border border-white/10 uppercase select-none shrink-0">
                 PREVIEW
               </span>

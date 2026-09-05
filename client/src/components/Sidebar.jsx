@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { fetchAllPlaylists } from '../services/playlistStorage';
 
 export default function Sidebar({ onRequestCreatePlaylist, onRequestAuth }) {
-  const { user, logout } = useAuth();
+  const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
   const [playlists, setPlaylists] = useState([]);
 
@@ -150,6 +150,8 @@ export default function Sidebar({ onRequestCreatePlaylist, onRequestAuth }) {
               <LogOut className="w-4 h-4" />
             </button>
           </div>
+        ) : loading ? (
+          <div className="w-full h-8 rounded-full bg-[#1A1A1A] animate-pulse" />
         ) : (
           <button
             onClick={onRequestAuth}

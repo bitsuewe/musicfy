@@ -8,19 +8,19 @@ export const prisma = globalForPrisma.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 let dbStatus = {
-  isAvailable: false,
-  lastChecked: 0,
-  checking: false
+  isAvailable: true,
+  consecutiveFailures: 0,
+  lastChecked: 0
 };
 
 /**
  * Fast circuit-breaker db query wrapper
- * Prevents stalling when database (e.g. Supabase tenant) is unreachable/paused
+ * Supports remote cloud databases (Supabase SSL) while preventing unbounded hangs
  */
-export const safeDbQuery = async (queryFn, fallback = null, timeoutMs = 1500) => {
+export const safeDbQuery = async (queryFn, fallback = null, timeoutMs = 7000) => {
   const now = Date.now();
-  // If known to be offline within last 45s, skip query immediately to avoid 8-second hang
-  if (!dbStatus.isAvailable && now - dbStatus.lastChecked < 45000 && dbStatus.lastChecked > 0) {
+  // If circuit breaker tripped (3+ consecutive failures within last 12s), use fast fallback
+  if (!dbStatus.isAvailable && now - dbStatus.lastChecked < 12000 && dbStatus.consecutiveFailures >= 3) {
     return typeof fallback === 'function' ? fallback() : fallback;
   }
 
@@ -31,10 +31,14 @@ export const safeDbQuery = async (queryFn, fallback = null, timeoutMs = 1500) =>
     );
     const result = await Promise.race([queryPromise, timeoutPromise]);
     dbStatus.isAvailable = true;
+    dbStatus.consecutiveFailures = 0;
     dbStatus.lastChecked = Date.now();
     return result;
   } catch (err) {
-    dbStatus.isAvailable = false;
+    dbStatus.consecutiveFailures += 1;
+    if (dbStatus.consecutiveFailures >= 3) {
+      dbStatus.isAvailable = false;
+    }
     dbStatus.lastChecked = Date.now();
     return typeof fallback === 'function' ? fallback(err) : fallback;
   }

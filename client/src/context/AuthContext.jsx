@@ -4,7 +4,17 @@ import api from '../services/api';
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  // Synchronous cache hydration to completely eliminate flash of unauthenticated content
+  const [user, setUser] = useState(() => {
+    try {
+      const cached = localStorage.getItem('musicfy_user');
+      return cached ? JSON.parse(cached) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+
+  // Always start with loading: true until initial session validation finishes
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -16,11 +26,24 @@ export const AuthProvider = ({ children }) => {
       const res = await api.get('/auth/me');
       if (res.data.success && res.data.user) {
         setUser(res.data.user);
+        try {
+          localStorage.setItem('musicfy_user', JSON.stringify(res.data.user));
+          if (res.data.token) {
+            localStorage.setItem('musicfy_token', res.data.token);
+          }
+        } catch (e) {}
       } else {
         setUser(null);
+        localStorage.removeItem('musicfy_user');
+        localStorage.removeItem('musicfy_token');
       }
     } catch (err) {
-      setUser(null);
+      // If unauthorized (401), clear cached user
+      if (err.response?.status === 401) {
+        setUser(null);
+        localStorage.removeItem('musicfy_user');
+        localStorage.removeItem('musicfy_token');
+      }
     } finally {
       setLoading(false);
     }
@@ -32,6 +55,7 @@ export const AuthProvider = ({ children }) => {
       if (res.data.token) {
         localStorage.setItem('musicfy_token', res.data.token);
       }
+      localStorage.setItem('musicfy_user', JSON.stringify(res.data.user));
       setUser(res.data.user);
     }
     return res.data;
@@ -43,6 +67,7 @@ export const AuthProvider = ({ children }) => {
       if (res.data.token) {
         localStorage.setItem('musicfy_token', res.data.token);
       }
+      localStorage.setItem('musicfy_user', JSON.stringify(res.data.user));
       setUser(res.data.user);
     }
     return res.data;
@@ -55,6 +80,7 @@ export const AuthProvider = ({ children }) => {
       console.error('Logout error:', err);
     } finally {
       localStorage.removeItem('musicfy_token');
+      localStorage.removeItem('musicfy_user');
       setUser(null);
     }
   };
@@ -66,6 +92,7 @@ export const AuthProvider = ({ children }) => {
       console.error('LogoutAll error:', err);
     } finally {
       localStorage.removeItem('musicfy_token');
+      localStorage.removeItem('musicfy_user');
       setUser(null);
     }
   };

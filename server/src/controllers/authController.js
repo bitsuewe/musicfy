@@ -128,8 +128,8 @@ export const register = async (req, res) => {
     // Save to persistent store immediately
     savePersistentUser(user);
 
-    // Sync to database in background
-    safeDbQuery(
+    // Sync to database synchronously with circuit-breaker to guarantee relational integrity
+    await safeDbQuery(
       (p) =>
         p.user.create({
           data: {
@@ -142,7 +142,7 @@ export const register = async (req, res) => {
           }
         }),
       null,
-      1500
+      2500
     ).catch((err) => {
       logger.warn('Prisma background user create note:', err.message);
     });
@@ -232,6 +232,35 @@ export const login = async (req, res) => {
     }
 
     if (!isMatch) {
+      // Re-check PostgreSQL directly in case password was changed or user was updated in DB
+      const dbUser = await safeDbQuery(
+        (p) =>
+          p.user.findFirst({
+            where: {
+              OR: [
+                { email: { equals: lowerInput, mode: 'insensitive' } },
+                { username: { equals: input, mode: 'insensitive' } }
+              ]
+            }
+          }),
+        null,
+        1500
+      );
+      if (dbUser && dbUser.passwordHash) {
+        try {
+          isMatch = await bcrypt.compare(password, dbUser.passwordHash);
+          if (!isMatch && typeof password === 'string') {
+            isMatch = await bcrypt.compare(password.trim(), dbUser.passwordHash);
+          }
+          if (isMatch) {
+            user = dbUser;
+            savePersistentUser(dbUser);
+          }
+        } catch (e) {}
+      }
+    }
+
+    if (!isMatch) {
       return res.status(401).json({
         success: false,
         error: { code: 'INVALID_CREDENTIALS', message: 'Invalid email or password.' }
@@ -287,7 +316,8 @@ export const getMe = async (req, res) => {
 
   return res.json({
     success: true,
-    user: formatSafeUser(req.user)
+    user: formatSafeUser(req.user),
+    token: req.rawToken || null
   });
 };
 

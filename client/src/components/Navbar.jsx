@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 
 export default function Navbar({ onRequestAuth }) {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [query, setQuery] = useState(searchParams.get('q') || '');
@@ -113,12 +113,14 @@ export default function Navbar({ onRequestAuth }) {
             className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#111114] border border-[#27272A] hover:border-[#10B981] transition-colors"
           >
             <img
-              src={user.avatarUrl}
+              src={user.avatarUrl || user.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.username}`}
               alt=""
               className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#18181C] object-cover"
             />
             <span className="text-xs font-semibold text-white max-w-[80px] sm:max-w-[120px] truncate">{user.username}</span>
           </button>
+        ) : loading ? (
+          <div className="w-20 h-8 rounded-xl bg-[#111114] animate-pulse" />
         ) : (
           <button
             onClick={onRequestAuth}

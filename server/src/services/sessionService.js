@@ -59,7 +59,29 @@ export const validateSession = async (rawToken) => {
   // 1. Fast Path: check persistent session store
   const persistentSess = findPersistentSession(tokenHash);
   if (persistentSess) {
-    const user = findPersistentUserById(persistentSess.userId);
+    let user = findPersistentUserById(persistentSess.userId);
+    if (!user) {
+      user = await safeDbQuery(
+        (p) =>
+          p.user.findUnique({
+            where: { id: persistentSess.userId },
+            select: {
+              id: true,
+              username: true,
+              email: true,
+              avatar: true,
+              emailVerified: true,
+              role: true,
+              createdAt: true
+            }
+          }),
+        null,
+        1500
+      );
+      if (user) {
+        savePersistentUser(user);
+      }
+    }
     if (user) {
       return user;
     }

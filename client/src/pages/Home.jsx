@@ -33,7 +33,7 @@ const MOOD_CHIPS = [
 ];
 
 export default function Home({ onAddToPlaylist }) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { currentTrack, isPlaying, playTrack, togglePlay, addToQueue, recentlyPlayed } = usePlayer();
   const [activeMood, setActiveMood] = useState('all');
   const [heroIndex, setHeroIndex] = useState(0);
@@ -228,8 +228,14 @@ export default function Home({ onAddToPlaylist }) {
             {getGreeting()}{user ? `, ${user.username}` : ''}
             <span className="text-2xl animate-pulse">✨</span>
           </h1>
-          <p className="text-xs sm:text-sm text-[#A1A1AA] font-medium mt-1">
-            {user ? "Your personalized universe of music, tailored to your listening habits." : "Hand-curated playlists, global live streams, and tailored recommendations."}
+          <p className="text-xs sm:text-sm text-[#A1A1AA] font-medium mt-1 min-h-[20px]">
+            {user ? (
+              "Your personalized universe of music, tailored to your listening habits."
+            ) : authLoading ? (
+              <span className="inline-block w-48 h-3.5 bg-white/5 rounded animate-pulse" />
+            ) : (
+              "Hand-curated playlists, global live streams, and tailored recommendations."
+            )}
           </p>
         </div>
 

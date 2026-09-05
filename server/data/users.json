@@ -8,5 +8,24 @@
     "emailVerified": false,
     "role": "USER",
     "createdAt": "2026-09-05T12:10:02.209Z"
+  },
+  {
+    "id": "7a42ed2e-afc9-4d15-853d-f2d5ccef3b2c",
+    "username": "MusicfyAdmin",
+    "email": "admin@musicfy.com",
+    "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=MusicfyAdmin",
+    "emailVerified": false,
+    "role": "ADMIN",
+    "createdAt": "2026-08-17T10:55:20.324Z"
+  },
+  {
+    "id": "usr_1788622146573_94kfjr",
+    "username": "tester_143055",
+    "email": "authtest_1788622143055@example.com",
+    "passwordHash": "$2b$12$ES/cK5ON7rZ2waHJ6E0F9ObAvQ7TKFCMyIVwVBfesHMqf4w2WyCvi",
+    "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=tester_143055",
+    "emailVerified": false,
+    "role": "USER",
+    "createdAt": "2026-09-05T15:29:06.573Z"
   }
 ]

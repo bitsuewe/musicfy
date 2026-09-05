@@ -6,7 +6,7 @@ export const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
   const location = useLocation();
 
-  if (loading) {
+  if (loading && !user) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-emerald-500"></div>
@@ -14,7 +14,7 @@ export const ProtectedRoute = ({ children }) => {
     );
   }
 
-  if (!user) {
+  if (!user && !loading) {
     return <Navigate to="/" state={{ from: location }} replace />;
   }
 
