@@ -53,19 +53,21 @@ export default function DownloadButton({
 
     if (isDownloading) return;
 
+    const trackTitle = (track?.title || track?.name || 'this track').trim() || 'this track';
+
     try {
       setIsDownloading(true);
       const success = await downloadTrackOffline(track, true);
       if (success) {
         setIsDownloaded(true);
-        showToast(`Downloaded "${track.title || 'song'}"! Ready offline.`);
+        showToast(`Downloaded "${trackTitle}"! Ready offline.`);
         if (onComplete) onComplete();
       } else {
-        showToast(`Could not complete download for "${track.title || 'song'}"`);
+        showToast(`Could not complete download for "${trackTitle}"`);
       }
     } catch (err) {
       console.warn('Download error:', err);
-      showToast(`Download failed for "${track.title || 'song'}"`);
+      showToast(`Download failed for "${trackTitle}"`);
     } finally {
       setIsDownloading(false);
     }

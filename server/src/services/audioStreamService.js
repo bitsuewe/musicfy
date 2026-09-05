@@ -1,4 +1,4 @@
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import axios from 'axios';
 import { Innertube, UniversalCache } from 'youtubei.js';
@@ -51,18 +51,25 @@ export const getDirectAudioUrl = async (videoId) => {
     return cached.url;
   }
 
-  // Tier 1: yt-dlp direct audio stream extraction
-  try {
-    const cmd = `python -m yt_dlp -g -f bestaudio "https://www.youtube.com/watch?v=${sanitizedId}"`;
-    const { stdout } = await execAsync(cmd, { timeout: 12000 });
-    const lines = stdout.trim().split('\n').map((l) => l.trim()).filter((l) => l.startsWith('http'));
-    if (lines.length > 0 && lines[0]) {
-      const directUrl = lines[0];
-      audioUrlCache.set(sanitizedId, { url: directUrl, timestamp: Date.now() });
-      return directUrl;
-    }
-  } catch (err) {
-    logger.warn(`yt-dlp extraction warning for ${sanitizedId}:`, err.message);
+  // Tier 1: yt-dlp direct audio stream extraction across system and local binaries
+  const candidateCommands = [
+    `yt-dlp -g -f bestaudio "https://www.youtube.com/watch?v=${sanitizedId}"`,
+    `./yt-dlp -g -f bestaudio "https://www.youtube.com/watch?v=${sanitizedId}"`,
+    `python3 -m yt_dlp -g -f bestaudio "https://www.youtube.com/watch?v=${sanitizedId}"`,
+    `python -m yt_dlp -g -f bestaudio "https://www.youtube.com/watch?v=${sanitizedId}"`,
+    `py -m yt_dlp -g -f bestaudio "https://www.youtube.com/watch?v=${sanitizedId}"`
+  ];
+
+  for (const cmd of candidateCommands) {
+    try {
+      const { stdout } = await execAsync(cmd, { timeout: 14000 });
+      const lines = stdout.trim().split('\n').map((l) => l.trim()).filter((l) => l.startsWith('http'));
+      if (lines.length > 0 && lines[0]) {
+        const directUrl = lines[0];
+        audioUrlCache.set(sanitizedId, { url: directUrl, timestamp: Date.now() });
+        return directUrl;
+      }
+    } catch (err) {}
   }
 
   // Tier 2: Innertube fallback
@@ -85,7 +92,7 @@ export const getDirectAudioUrl = async (videoId) => {
 };
 
 /**
- * Stream real track audio directly to response
+ * Stream real track audio directly to response using yt-dlp native stdout stream
  * @param {string} videoId 
  * @param {import('express').Response} res 
  * @param {boolean} asDownload 
@@ -97,9 +104,73 @@ export const pipeAudioStream = async (videoId, res, asDownload = false, filename
     return res.status(400).json({ error: 'Valid YouTube Video ID is required' });
   }
 
+  const cleanFilename = `${filename.replace(/\.[a-z0-9]+$/i, '').replace(/[^a-zA-Z0-9_\-\s.]/g, '').trim() || sanitizedId}.webm`;
+
+  const headers = {
+    'Content-Type': 'audio/webm',
+    'Cache-Control': 'public, max-age=86400',
+    'Transfer-Encoding': 'chunked'
+  };
+
+  if (asDownload) {
+    headers['Content-Disposition'] = `attachment; filename="${cleanFilename}"`;
+  }
+
+  // Tier 1: Direct native yt-dlp stdout streaming
+  const candidateExecutables = [
+    { cmd: 'yt-dlp', args: ['-f', 'bestaudio', '--no-playlist', '-o', '-', `https://www.youtube.com/watch?v=${sanitizedId}`] },
+    { cmd: './yt-dlp', args: ['-f', 'bestaudio', '--no-playlist', '-o', '-', `https://www.youtube.com/watch?v=${sanitizedId}`] },
+    { cmd: 'python3', args: ['-m', 'yt_dlp', '-f', 'bestaudio', '--no-playlist', '-o', '-', `https://www.youtube.com/watch?v=${sanitizedId}`] },
+    { cmd: 'python', args: ['-m', 'yt_dlp', '-f', 'bestaudio', '--no-playlist', '-o', '-', `https://www.youtube.com/watch?v=${sanitizedId}`] },
+    { cmd: 'py', args: ['-m', 'yt_dlp', '-f', 'bestaudio', '--no-playlist', '-o', '-', `https://www.youtube.com/watch?v=${sanitizedId}`] }
+  ];
+
+  for (const execOption of candidateExecutables) {
+    try {
+      const child = spawn(execOption.cmd, execOption.args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      let headerWritten = false;
+
+      const streamSuccess = await new Promise((resolve) => {
+        child.stdout.on('data', (chunk) => {
+          if (!headerWritten) {
+            headerWritten = true;
+            res.writeHead(200, headers);
+            resolve(true);
+          }
+          res.write(chunk);
+        });
+
+        child.stdout.on('end', () => {
+          if (headerWritten) {
+            res.end();
+          }
+        });
+
+        child.on('error', () => {
+          if (!headerWritten) resolve(false);
+        });
+
+        // 10s timeout to start emitting chunks
+        setTimeout(() => {
+          if (!headerWritten) {
+            try { child.kill('SIGTERM'); } catch (e) {}
+            resolve(false);
+          }
+        }, 10000);
+      });
+
+      if (streamSuccess) {
+        res.on('close', () => {
+          try { child.kill('SIGTERM'); } catch (e) {}
+        });
+        return;
+      }
+    } catch (e) {}
+  }
+
+  // Tier 2: Fallback via direct URL extraction and axios pipe
   try {
     const directUrl = await getDirectAudioUrl(sanitizedId);
-
     if (directUrl) {
       const response = await axios({
         method: 'get',
@@ -107,61 +178,31 @@ export const pipeAudioStream = async (videoId, res, asDownload = false, filename
         responseType: 'stream',
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': '*/*',
-          'Accept-Encoding': 'identity'
+          'Accept': '*/*'
         },
         timeout: 20000
       });
 
-      const contentType = response.headers['content-type'] || 'audio/webm';
-      const ext = contentType.includes('mp4') || contentType.includes('m4a') ? 'm4a' : 'webm';
-      const cleanFilename = `${filename.replace(/\.[a-z0-9]+$/i, '').replace(/[^a-zA-Z0-9_\-\s.]/g, '').trim() || sanitizedId}.${ext}`;
-
-      const headers = {
-        'Content-Type': contentType,
-        'Accept-Ranges': 'bytes',
-        'Cache-Control': 'public, max-age=86400'
-      };
-
-      if (response.headers['content-length']) {
-        headers['Content-Length'] = response.headers['content-length'];
+      if (!res.headersSent) {
+        res.writeHead(200, headers);
       }
 
-      if (asDownload) {
-        headers['Content-Disposition'] = `attachment; filename="${cleanFilename}"`;
-      }
-
-      res.writeHead(200, headers);
-
-      response.data.on('error', (err) => {
-        logger.error(`Stream pipe error for track ${sanitizedId}:`, err.message);
-        if (!res.headersSent) {
-          res.status(500).json({ error: 'Audio streaming interrupted' });
-        } else {
-          res.end();
-        }
-      });
-
+      response.data.pipe(res);
       res.on('close', () => {
         if (response.data && response.data.destroy) {
           response.data.destroy();
         }
       });
-
-      response.data.pipe(res);
       return;
     }
+  } catch (err) {
+    logger.warn(`Direct URL fallback error for ${sanitizedId}:`, err.message);
+  }
 
-    // Fallback if directUrl failed
-    logger.error(`No direct audio stream URL available for ${sanitizedId}`);
+  if (!res.headersSent) {
     return res.status(502).json({
       error: 'Audio stream temporarily unavailable for this track',
       videoId: sanitizedId
     });
-  } catch (err) {
-    logger.error(`Failed to pipe audio stream for ${sanitizedId}:`, err.message);
-    if (!res.headersSent) {
-      res.status(502).json({ error: 'Failed to extract audio stream', details: err.message });
-    }
   }
 };

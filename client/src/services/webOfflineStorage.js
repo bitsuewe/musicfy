@@ -147,13 +147,14 @@ export const downloadTrackOffline = async (track, isManual = true, onProgress = 
 
   let blob = null;
 
-  // 1. Build endpoint candidate list dynamically
+  // 1. Build endpoint candidate list dynamically with localhost fast-path
   const apiBase = (api.defaults?.baseURL || '').replace(/\/+$/, '');
   const candidateEndpoints = [
-    `${apiBase}/music/download/${trackId}`,
-    `${apiBase}/music/stream/${trackId}`,
     `http://localhost:5000/api/music/download/${trackId}`,
+    `${apiBase}/music/download/${trackId}`,
     `http://127.0.0.1:5000/api/music/download/${trackId}`,
+    `http://localhost:5000/api/music/stream/${trackId}`,
+    `${apiBase}/music/stream/${trackId}`,
     `https://musicfy-thjc.onrender.com/api/music/download/${trackId}`
   ];
   const uniqueEndpoints = [...new Set(candidateEndpoints.filter(Boolean))];
@@ -162,7 +163,7 @@ export const downloadTrackOffline = async (track, isManual = true, onProgress = 
     for (const url of uniqueEndpoints) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s for full real audio download
+        const timeoutId = setTimeout(() => controller.abort(), 90000); // 90s for full real audio download
         const res = await fetch(url, { signal: controller.signal, mode: 'cors' });
         clearTimeout(timeoutId);
         if (res.ok) {
