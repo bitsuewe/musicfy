@@ -17,6 +17,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { usePlayer } from '../context/PlayerContext';
 import TrackCard from '../components/TrackCard';
+import PlaylistCard from '../components/PlaylistCard';
 import TrackRow from '../components/TrackRow';
 import { fetchAllPlaylists } from '../services/playlistStorage';
 import {
@@ -277,54 +278,62 @@ export default function Library({ onRequestCreatePlaylist, onAddToPlaylist }) {
       {/* Main Content Grid (Playlists & Special Tiles) */}
       {(activeTab === 'all' || activeTab === 'playlists') && (
         <section>
-          <h3 className="text-xs font-bold uppercase tracking-wider text-[#A1A1AA] mb-3 sm:mb-4">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-[#B3B3B3] mb-4">
             Playlists & Offline Collections
           </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5 sm:gap-6">
             
-            {/* Liked Songs Special Tile */}
+            {/* Liked Songs Special Card */}
             <div
               onClick={() => navigate('/playlist/liked')}
-              className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-[#10B981] to-[#047857] text-white cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all flex flex-col justify-between aspect-square shadow-lg"
+              className="group relative p-3.5 sm:p-4 rounded-lg bg-[#181818] hover:bg-[#282828] cursor-pointer flex flex-col select-none transition-all duration-300 border border-transparent hover:border-white/5"
             >
-              <Heart className="w-6 h-6 sm:w-8 sm:h-8 fill-white" />
-              <div>
-                <h3 className="text-base sm:text-lg md:text-xl font-extrabold tracking-tight">Liked Songs</h3>
-                <p className="text-[11px] sm:text-xs text-white/80 font-medium">{likedCount} saved tracks</p>
+              <div className="relative aspect-square w-full rounded-md overflow-hidden mb-3.5 bg-gradient-to-br from-[#450af5] to-[#8e8ee5] flex items-center justify-center shadow-md group-hover:shadow-xl transition-shadow">
+                <Heart className="w-10 h-10 sm:w-12 sm:h-12 fill-white text-white drop-shadow-md group-hover:scale-110 transition-transform" />
+                <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 drop-shadow-xl z-10">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); navigate('/playlist/liked'); }}
+                    className="w-12 h-12 rounded-full bg-[#1ED760] hover:bg-[#1fdf64] text-black flex items-center justify-center shadow-2xl hover:scale-105 active:scale-95 transition-transform"
+                    title="Play Liked Songs"
+                  >
+                    <Play className="w-5 h-5 fill-black text-black ml-0.5" />
+                  </button>
+                </div>
+              </div>
+              <div className="overflow-hidden space-y-1 min-h-[44px]">
+                <h4 className="text-sm font-bold truncate text-white leading-tight">Liked Songs</h4>
+                <p className="text-xs text-[#B3B3B3] truncate font-normal leading-tight">{likedCount} saved track{likedCount === 1 ? '' : 's'}</p>
               </div>
             </div>
 
-            {/* Offline Music Special Tile */}
+            {/* Offline Music Special Card */}
             <div
               onClick={() => setActiveTab('downloads')}
-              className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-[#1E293B] to-[#0F172A] border border-white/10 text-white cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all flex flex-col justify-between aspect-square shadow-lg"
+              className="group relative p-3.5 sm:p-4 rounded-lg bg-[#181818] hover:bg-[#282828] cursor-pointer flex flex-col select-none transition-all duration-300 border border-transparent hover:border-white/5"
             >
-              <Download className="w-6 h-6 sm:w-8 sm:h-8 text-[#10B981]" />
-              <div>
-                <h3 className="text-base sm:text-lg md:text-xl font-extrabold tracking-tight">Downloaded</h3>
-                <p className="text-[11px] sm:text-xs text-[#34D399] font-medium">
-                  {downloadedData.allTracks.length} offline tracks
-                </p>
+              <div className="relative aspect-square w-full rounded-md overflow-hidden mb-3.5 bg-gradient-to-br from-[#054338] to-[#1DB954] flex items-center justify-center shadow-md group-hover:shadow-xl transition-shadow">
+                <Download className="w-10 h-10 sm:w-12 sm:h-12 text-white drop-shadow-md group-hover:scale-110 transition-transform" />
+                {downloadedData.allTracks.length > 0 && (
+                  <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 drop-shadow-xl z-10">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); playOfflineQueue(false); }}
+                      className="w-12 h-12 rounded-full bg-[#1ED760] hover:bg-[#1fdf64] text-black flex items-center justify-center shadow-2xl hover:scale-105 active:scale-95 transition-transform"
+                      title="Play Offline Songs"
+                    >
+                      <Play className="w-5 h-5 fill-black text-black ml-0.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="overflow-hidden space-y-1 min-h-[44px]">
+                <h4 className="text-sm font-bold truncate text-white leading-tight">Downloaded</h4>
+                <p className="text-xs text-[#B3B3B3] truncate font-normal leading-tight">{downloadedData.allTracks.length} offline track{downloadedData.allTracks.length === 1 ? '' : 's'}</p>
               </div>
             </div>
 
             {/* Custom User Playlists */}
             {playlists.map((pl) => (
-              <div
-                key={pl.id}
-                onClick={() => navigate(`/playlist/${pl.id}`)}
-                className="p-3 sm:p-4 rounded-2xl bg-[#111114] border border-[#27272A] hover:border-[#10B981]/40 cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all flex flex-col"
-              >
-                <img
-                  src={pl.coverUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=600&q=80'}
-                  alt=""
-                  className="w-full aspect-square rounded-xl object-cover mb-2.5 sm:mb-3"
-                />
-                <h4 className="text-xs sm:text-sm font-bold text-white truncate">{pl.title}</h4>
-                <p className="text-[10px] sm:text-xs text-[#A1A1AA] truncate mt-0.5">
-                  {pl.isCollab ? 'Collaborative' : 'Playlist'} • {pl.tracks?.length || 0} tracks
-                </p>
-              </div>
+              <PlaylistCard key={pl.id} playlist={pl} />
             ))}
           </div>
         </section>
@@ -333,11 +342,11 @@ export default function Library({ onRequestCreatePlaylist, onAddToPlaylist }) {
       {/* History */}
       {(activeTab === 'all' || activeTab === 'history') && history.length > 0 && (
         <section>
-          <h3 className="text-xs font-bold uppercase tracking-wider text-[#A1A1AA] mb-3 sm:mb-4 flex items-center gap-2">
-            <Clock className="w-4 h-4 text-[#34D399]" />
+          <h3 className="text-xs font-bold uppercase tracking-wider text-[#B3B3B3] mb-4 flex items-center gap-2">
+            <Clock className="w-4 h-4 text-[#1ED760]" />
             Recently Played
           </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5 sm:gap-6">
             {history.slice(0, 12).map((track, i) => (
               <TrackCard key={`hist-${track.id}-${i}`} track={track} onAddToPlaylist={onAddToPlaylist} />
             ))}

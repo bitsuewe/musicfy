@@ -8,19 +8,16 @@ import {
   Moon,
   Zap,
   Headphones,
-  ChevronRight,
-  TrendingUp,
-  Music2,
   Compass,
-  Heart,
-  ListPlus,
-  Clock,
-  History
+  History,
+  ListMusic
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { usePlayer } from '../context/PlayerContext';
 import TrackCard from '../components/TrackCard';
+import PlaylistCard from '../components/PlaylistCard';
 import OfflineNotice from '../components/OfflineNotice';
+import { fetchAllPlaylists } from '../services/playlistStorage';
 import api from '../services/api';
 
 const MOOD_CHIPS = [
@@ -38,6 +35,7 @@ export default function Home({ onAddToPlaylist }) {
   const [activeMood, setActiveMood] = useState('all');
   const [heroIndex, setHeroIndex] = useState(0);
   const [recs, setRecs] = useState(null);
+  const [playlists, setPlaylists] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
 
@@ -59,7 +57,18 @@ export default function Home({ onAddToPlaylist }) {
 
   useEffect(() => {
     fetchHomeData();
+    loadPlaylists();
+
+    const handlePlaylistUpdate = () => loadPlaylists();
+    window.addEventListener('spicify_playlists_updated', handlePlaylistUpdate);
+    return () => window.removeEventListener('spicify_playlists_updated', handlePlaylistUpdate);
   }, [user]);
+
+  const loadPlaylists = () => {
+    fetchAllPlaylists(user)
+      .then(list => setPlaylists(list || []))
+      .catch(() => {});
+  };
 
   const fetchHomeData = async () => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -108,7 +117,7 @@ export default function Home({ onAddToPlaylist }) {
     return recs?.becauseYouListened?.artist || "Featured Artists";
   }, [activeRecentTracks, recs?.becauseYouListened?.artist]);
 
-  // Build Personalized Hero Showcase based on what the user actually listened to
+  // Build Personalized Hero Showcase based on user activity
   const heroSlides = useMemo(() => {
     const slides = [];
 
@@ -123,7 +132,7 @@ export default function Home({ onAddToPlaylist }) {
         artist: t.artistName,
         description: `Continue your listening session with ${t.artistName}.`,
         coverUrl: t.thumbnail,
-        color: "from-emerald-950/80 via-zinc-900/90 to-[#09090B]",
+        color: "from-[#1DB954]/25 via-zinc-900/90 to-[#121212]",
         track: t
       });
     }
@@ -139,7 +148,7 @@ export default function Home({ onAddToPlaylist }) {
         artist: t.artistName,
         description: `Based on your listening activity with ${activeTopArtist}.`,
         coverUrl: t.thumbnail,
-        color: "from-teal-950/80 via-zinc-900/90 to-[#09090B]",
+        color: "from-teal-950/60 via-zinc-900/90 to-[#121212]",
         track: t
       });
     }
@@ -155,7 +164,7 @@ export default function Home({ onAddToPlaylist }) {
         artist: t.artistName,
         description: `Tailored tracks matching your preferences and saved likes.`,
         coverUrl: t.thumbnail,
-        color: "from-indigo-950/80 via-zinc-900/90 to-[#09090B]",
+        color: "from-emerald-950/60 via-zinc-900/90 to-[#121212]",
         track: t
       });
     }
@@ -165,12 +174,12 @@ export default function Home({ onAddToPlaylist }) {
       slides.push({
         id: currentTrack?.id || "fHI8X4OXluQ",
         tag: "DISCOVER MUSIC",
-        badge: "Lossless • High-Fidelity",
+        badge: "High-Fidelity Audio",
         title: currentTrack?.title || "Trending Global Hits",
         artist: currentTrack?.artistName || "Top Artists",
         description: "Search and play any song across millions of tracks worldwide.",
         coverUrl: currentTrack?.thumbnail || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1200&q=80",
-        color: "from-emerald-950/80 via-zinc-900/90 to-[#09090B]",
+        color: "from-[#1DB954]/20 via-zinc-900/90 to-[#121212]",
         track: currentTrack
       });
     }
@@ -208,10 +217,18 @@ export default function Home({ onAddToPlaylist }) {
     return matched.length > 0 ? matched : tracks.slice(0, 6);
   };
 
+  // Quick picks tracks for Spotify signature 6-grid
+  const quickPicks = useMemo(() => {
+    const list = activeRecentTracks.length > 0
+      ? activeRecentTracks
+      : (recs?.continueListening || recs?.madeForYou || []);
+    return list.slice(0, 6);
+  }, [activeRecentTracks, recs]);
+
   return (
-    <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-10 pb-36 animate-fadeIn select-none">
+    <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-9 pb-36 animate-fadeIn select-none font-['Plus_Jakarta_Sans',sans-serif]">
       
-      {/* 📶 YouTube-Style Offline Banner on Home */}
+      {/* Offline Notice Banner */}
       {!isOnline && (
         <OfflineNotice
           compact
@@ -221,14 +238,13 @@ export default function Home({ onAddToPlaylist }) {
         />
       )}
 
-      {/* 🌟 1. Header & Dynamic Mood Filter Tabs */}
+      {/* 🌟 1. Spotify Header & Mood Filter Chips */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-white flex items-center gap-3">
-            {getGreeting()}{user ? `, ${user.username}` : ''}
-            <span className="text-2xl animate-pulse">✨</span>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight text-white flex items-center gap-2.5">
+            <span>{getGreeting()}{user ? `, ${user.username}` : ''}</span>
           </h1>
-          <p className="text-xs sm:text-sm text-[#A1A1AA] font-medium mt-1 min-h-[20px]">
+          <p className="text-xs sm:text-sm text-[#B3B3B3] font-medium mt-1">
             {user ? (
               "Your personalized universe of music, tailored to your listening habits."
             ) : authLoading ? (
@@ -248,13 +264,13 @@ export default function Home({ onAddToPlaylist }) {
               <button
                 key={chip.id}
                 onClick={() => setActiveMood(chip.id)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 ${
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer ${
                   isActive
-                    ? 'bg-[#10B981] text-black shadow-lg shadow-[#10B981]/20 scale-105'
-                    : 'bg-white/5 text-[#D4D4D8] hover:bg-white/10 hover:text-white border border-white/5'
+                    ? 'bg-white text-black shadow-md'
+                    : 'bg-[#282828] text-white hover:bg-[#3E3E3E]'
                 }`}
               >
-                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-black fill-black' : ''}`} />
+                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-black fill-black' : 'text-[#B3B3B3]'}`} />
                 {chip.label}
               </button>
             );
@@ -262,38 +278,83 @@ export default function Home({ onAddToPlaylist }) {
         </div>
       </div>
 
-      {/* 🎬 2. Dynamic Personalized Hero Spotlight Showcase */}
+      {/* ⚡ 2. Spotify Signature 6-Item Quick-Access Tiles */}
+      {quickPicks.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {quickPicks.map((track) => {
+            const isThisPlaying = currentTrack?.id === track.id && isPlaying;
+            return (
+              <div
+                key={`quick-${track.id}`}
+                onClick={() => playTrack(track)}
+                className="group flex items-center bg-[#282828]/70 hover:bg-[#383838] rounded-md overflow-hidden cursor-pointer transition-all duration-200 shadow-sm relative pr-4"
+              >
+                <img
+                  src={track.thumbnail || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=300&q=80'}
+                  alt=""
+                  className="w-16 h-16 object-cover flex-shrink-0 shadow-md"
+                />
+                <div className="px-3.5 overflow-hidden flex-1 min-w-0">
+                  <p className={`text-sm font-bold truncate ${isThisPlaying ? 'text-[#1ED760]' : 'text-white'}`}>
+                    {track.title}
+                  </p>
+                  <p className="text-xs text-[#B3B3B3] truncate font-normal mt-0.5">
+                    {track.artistName}
+                  </p>
+                </div>
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (isThisPlaying) togglePlay();
+                    else playTrack(track);
+                  }}
+                  className="w-11 h-11 rounded-full bg-[#1ED760] text-black flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-xl hover:scale-105 active:scale-95 drop-shadow-lg shrink-0 ml-2"
+                  title="Play"
+                >
+                  {isThisPlaying ? (
+                    <Pause className="w-5 h-5 fill-black text-black" />
+                  ) : (
+                    <Play className="w-5 h-5 fill-black text-black ml-0.5" />
+                  )}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 🎬 3. Dynamic Hero Spotlight Showcase */}
       {activeHero && (
-        <div className="relative rounded-3xl overflow-hidden border border-white/15 shadow-2xl bg-zinc-950 transition-all duration-700 min-h-[340px] flex items-end">
-          
+        <div className="relative rounded-2xl overflow-hidden border border-[#282828] shadow-2xl bg-[#121212] transition-all duration-700 min-h-[300px] sm:min-h-[340px] flex items-end">
           <img
             src={activeHero.coverUrl}
             alt=""
-            className="absolute inset-0 w-full h-full object-cover opacity-40 scale-105 transition-all duration-1000"
+            className="absolute inset-0 w-full h-full object-cover opacity-35 scale-105 transition-all duration-1000"
           />
 
-          <div className={`absolute inset-0 bg-gradient-to-t ${activeHero.color} opacity-90`} />
+          <div className={`absolute inset-0 bg-gradient-to-t ${activeHero.color} opacity-95`} />
           <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/40 to-transparent" />
 
-          <div className="relative z-10 p-6 sm:p-10 max-w-2xl space-y-4">
+          <div className="relative z-10 p-6 sm:p-10 max-w-2xl space-y-3.5">
             <div className="flex items-center gap-2.5">
-              <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-white/15 text-white backdrop-blur-md border border-white/20">
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-white/10 text-white backdrop-blur-md border border-white/15">
                 {activeHero.tag}
               </span>
-              <span className="text-xs font-bold text-[#10B981] flex items-center gap-1">
+              <span className="text-xs font-bold text-[#1ED760] flex items-center gap-1">
                 <Sparkles className="w-3.5 h-3.5" />
                 {activeHero.badge}
               </span>
             </div>
 
             <div>
-              <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-none">
+              <h2 className="text-2xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-none">
                 {activeHero.title}
               </h2>
-              <p className="text-lg sm:text-xl font-bold text-white/80 mt-1">
+              <p className="text-base sm:text-lg font-bold text-white/80 mt-1">
                 {activeHero.artist}
               </p>
-              <p className="text-xs sm:text-sm text-zinc-300 font-medium line-clamp-2 mt-2 max-w-lg">
+              <p className="text-xs sm:text-sm text-[#B3B3B3] font-normal line-clamp-2 mt-1.5 max-w-lg">
                 {activeHero.description}
               </p>
             </div>
@@ -304,7 +365,7 @@ export default function Home({ onAddToPlaylist }) {
                   if (isHeroPlaying) togglePlay();
                   else if (activeHero.track) playTrack(activeHero.track);
                 }}
-                className="px-6 py-3 rounded-full bg-white text-black font-extrabold flex items-center gap-2 shadow-xl hover:scale-105 active:scale-95 transition-all"
+                className="px-6 py-3 rounded-full bg-[#1ED760] hover:bg-[#1fdf64] text-black font-extrabold flex items-center gap-2 shadow-xl hover:scale-105 active:scale-95 transition-all cursor-pointer text-sm"
               >
                 {isHeroPlaying ? (
                   <>
@@ -322,23 +383,23 @@ export default function Home({ onAddToPlaylist }) {
               {activeHero.track && (
                 <button
                   onClick={() => addToQueue(activeHero.track)}
-                  className="p-3 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md border border-white/15 transition-all"
+                  className="px-4 py-3 rounded-full bg-white/10 hover:bg-white/20 text-white font-bold text-xs backdrop-blur-md border border-white/15 transition-all"
                   title="Add to Queue"
                 >
-                  <ListPlus className="w-4 h-4" />
+                  Add to Queue
                 </button>
               )}
             </div>
           </div>
 
           {heroSlides.length > 1 && (
-            <div className="absolute top-6 right-6 z-10 flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
+            <div className="absolute top-5 right-5 z-10 flex items-center gap-1.5 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
               {heroSlides.map((_, i) => (
                 <button
                   key={i}
                   onClick={() => setHeroIndex(i)}
                   className={`h-1.5 rounded-full transition-all ${
-                    heroIndex === i ? 'w-6 bg-[#10B981]' : 'w-1.5 bg-white/30 hover:bg-white/60'
+                    heroIndex === i ? 'w-6 bg-[#1ED760]' : 'w-1.5 bg-white/30 hover:bg-white/60'
                   }`}
                 />
               ))}
@@ -348,123 +409,31 @@ export default function Home({ onAddToPlaylist }) {
       )}
 
       {loading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5 sm:gap-6">
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="aspect-square bg-white/5 rounded-2xl animate-pulse" />
+            <div key={i} className="p-4 rounded-lg bg-[#181818] animate-pulse space-y-3">
+              <div className="aspect-square bg-[#282828] rounded-md" />
+              <div className="h-4 bg-[#282828] rounded w-3/4" />
+              <div className="h-3 bg-[#282828] rounded w-1/2" />
+            </div>
           ))}
         </div>
       ) : (
         <>
-          {/* ⚡ 3. Real Recent Activity: Jump Back In Grid (User's Exact Played Songs) */}
-          {activeRecentTracks.length > 0 && (
-            <section className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-black uppercase tracking-wider text-[#A1A1AA] flex items-center gap-1.5">
-                  <History className="w-3.5 h-3.5 text-[#10B981]" />
-                  Your Recent Activity & Jump Back In
-                </h3>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {activeRecentTracks.slice(0, 6).map((track) => {
-                  const isThisPlaying = currentTrack?.id === track.id && isPlaying;
-                  return (
-                    <div
-                      key={`quick-${track.id}`}
-                      onClick={() => playTrack(track)}
-                      className="group flex items-center gap-3.5 bg-white/5 hover:bg-white/10 rounded-2xl overflow-hidden cursor-pointer transition-all duration-200 border border-white/5 hover:border-white/15 shadow-sm p-1.5 pr-4"
-                    >
-                      <img
-                        src={track.thumbnail}
-                        alt=""
-                        className="w-14 h-14 rounded-xl object-cover flex-shrink-0 shadow-md"
-                      />
-                      <div className="overflow-hidden flex-1 min-w-0">
-                        <p className={`text-sm font-bold truncate ${isThisPlaying ? 'text-[#10B981]' : 'text-white'}`}>
-                          {track.title}
-                        </p>
-                        <p className="text-xs text-[#A1A1AA] truncate font-medium mt-0.5">
-                          {track.artistName}
-                        </p>
-                      </div>
-
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (isThisPlaying) togglePlay();
-                          else playTrack(track);
-                        }}
-                        className="w-9 h-9 rounded-full bg-[#10B981] text-black flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:scale-105 active:scale-95"
-                      >
-                        {isThisPlaying ? (
-                          <Pause className="w-4 h-4 fill-black text-black" />
-                        ) : (
-                          <Play className="w-4 h-4 fill-black text-black ml-0.5" />
-                        )}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          )}
-
-          {/* 💎 4. Personalized Editorial Station based on User's Actual Top Artist */}
-          {recs?.becauseYouListened?.tracks?.length > 0 && (
-            <section className="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-zinc-900 via-zinc-900/80 to-[#121216] border border-white/10 relative overflow-hidden shadow-2xl">
-              <div className="absolute -top-24 -right-24 w-96 h-96 bg-[#10B981]/15 rounded-full blur-3xl pointer-events-none" />
-              <div className="mb-6 relative z-10">
-                <span className="text-[11px] font-black uppercase tracking-widest text-[#10B981] flex items-center gap-1.5">
-                  <Radio className="w-3.5 h-3.5" />
-                  Personalized Station
-                </span>
-                <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight mt-1">
-                  Because you love {activeTopArtist}
-                </h2>
-                <p className="text-xs text-[#A1A1AA] mt-1">
-                  Hand-picked tracks based on your listening history with {activeTopArtist}.
-                </p>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 relative z-10">
-                {recs.becauseYouListened.tracks.map((track) => (
-                  <TrackCard
-                    key={`byl-${track.id}`}
-                    track={track}
-                    onAddToPlaylist={onAddToPlaylist}
-                  />
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* 🚀 5. Continue Listening Row (User's Exact Played Songs) */}
-          {activeRecentTracks.length > 0 && (
-            <section className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
-                  Continue Listening
-                </h2>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                {filterByMood(activeRecentTracks).map((track) => (
-                  <TrackCard
-                    key={`cont-${track.id}`}
-                    track={track}
-                    onAddToPlaylist={onAddToPlaylist}
-                  />
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* 🎧 6. Made For You & Discovery Mix */}
+          {/* 🎧 4. Made For You (Spotify Signature Section) */}
           {recs?.madeForYou?.length > 0 && (
             <section className="space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
-                  Made For You
-                </h2>
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight hover:underline cursor-pointer">
+                    Made For You
+                  </h2>
+                  <p className="text-xs text-[#B3B3B3] font-medium mt-0.5">
+                    Your personal mix curated to match your musical taste.
+                  </p>
+                </div>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5 sm:gap-6">
                 {filterByMood(recs.madeForYou).map((track) => (
                   <TrackCard
                     key={`mfy-${track.id}`}
@@ -476,21 +445,97 @@ export default function Home({ onAddToPlaylist }) {
             </section>
           )}
 
-          {/* 🌍 7. Global New Discoveries */}
+          {/* 💎 5. Personalized Editorial Station based on User's Actual Top Artist */}
+          {recs?.becauseYouListened?.tracks?.length > 0 && (
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight hover:underline cursor-pointer">
+                    Because you love {activeTopArtist}
+                  </h2>
+                  <p className="text-xs text-[#B3B3B3] font-medium mt-0.5">
+                    Recommended tracks based on your listening habits with {activeTopArtist}.
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5 sm:gap-6">
+                {recs.becauseYouListened.tracks.map((track) => (
+                  <TrackCard
+                    key={`byl-${track.id}`}
+                    track={track}
+                    onAddToPlaylist={onAddToPlaylist}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* 🚀 6. Continue Listening Row */}
+          {activeRecentTracks.length > 0 && (
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight hover:underline cursor-pointer">
+                    Continue Listening
+                  </h2>
+                  <p className="text-xs text-[#B3B3B3] font-medium mt-0.5">
+                    Pick up right where you left off.
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5 sm:gap-6">
+                {filterByMood(activeRecentTracks).map((track) => (
+                  <TrackCard
+                    key={`cont-${track.id}`}
+                    track={track}
+                    onAddToPlaylist={onAddToPlaylist}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* 🌍 7. Trending Discoveries */}
           {recs?.newDiscoveries?.length > 0 && (
             <section className="space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
-                  Trending Discoveries
-                </h2>
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight hover:underline cursor-pointer">
+                    Trending Hits & New Discoveries
+                  </h2>
+                  <p className="text-xs text-[#B3B3B3] font-medium mt-0.5">
+                    The hottest songs trending across the world right now.
+                  </p>
+                </div>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5 sm:gap-6">
                 {filterByMood(recs.newDiscoveries).map((track) => (
                   <TrackCard
                     key={`nd-${track.id}`}
                     track={track}
                     onAddToPlaylist={onAddToPlaylist}
                   />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* 📻 8. Featured Playlists & Collections */}
+          {playlists.length > 0 && (
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight hover:underline cursor-pointer">
+                    Your Playlists & Collections
+                  </h2>
+                  <p className="text-xs text-[#B3B3B3] font-medium mt-0.5">
+                    Playlists created and saved to your Musicfy universe.
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5 sm:gap-6">
+                {playlists.slice(0, 12).map((pl) => (
+                  <PlaylistCard key={`home-pl-${pl.id}`} playlist={pl} />
                 ))}
               </div>
             </section>

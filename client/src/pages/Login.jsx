@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Sparkles, Eye, EyeOff, LogIn, Lock, Mail, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, Music2, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
@@ -26,122 +26,137 @@ export default function Login() {
       if (res?.success) {
         navigate(from, { replace: true });
       } else {
-        setError(res?.error?.message || 'Invalid email or password');
+        setError(res?.error?.message || 'Incorrect email or password.');
       }
     } catch (err) {
-      setError(err.response?.data?.error?.message || err.response?.data?.error || 'Authentication failed. Please check your credentials.');
+      setError(
+        err.response?.data?.error?.message ||
+        err.response?.data?.error ||
+        err.response?.data?.message ||
+        'Authentication failed. Please check your credentials.'
+      );
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-4 relative overflow-hidden bg-[#09090B] text-white select-none">
-      {/* Spotify & Apple Ambient Background Glow */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-gradient-to-tr from-[#10B981]/20 via-[#34D399]/10 to-transparent rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-10 right-10 w-[300px] h-[300px] bg-[#1DB954]/15 rounded-full blur-[100px] pointer-events-none" />
-
-      {/* Glassmorphic Production Auth Card */}
-      <div className="w-full max-w-md bg-[#121216]/80 backdrop-blur-2xl border border-white/10 rounded-3xl p-8 shadow-2xl relative z-10 animate-fadeIn">
+    <div className="min-h-screen w-full bg-[#000000] text-white flex flex-col items-center justify-center p-4 sm:p-6 select-none font-['Plus_Jakarta_Sans',sans-serif]">
+      {/* Centered Spotify-style Auth Box */}
+      <div className="w-full max-w-[440px] bg-[#121212] sm:border sm:border-[#282828] rounded-xl p-8 sm:p-10 shadow-2xl animate-fadeIn">
         
-        {/* Header Branding */}
+        {/* Brand Header */}
         <div className="flex flex-col items-center text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#10B981] to-[#34D399] flex items-center justify-center green-glow mb-3">
-            <Sparkles className="w-7 h-7 text-white" />
-          </div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-white">Welcome Back</h1>
-          <p className="text-xs text-[#A1A1AA] mt-1">Sign in to your Spicify music universe</p>
+          <Link to="/" className="inline-flex items-center gap-2 mb-6 group">
+            <div className="w-11 h-11 rounded-full bg-[#1DB954] flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
+              <Music2 className="w-5 h-5 text-black fill-black" />
+            </div>
+            <span className="text-xl font-black tracking-tight text-white">Musicfy</span>
+          </Link>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+            Log in to Musicfy
+          </h1>
         </div>
 
-        {/* Error Alert Badge */}
+        {/* Spotify-style Error Banner */}
         {error && (
-          <div className="mb-6 p-3.5 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold flex items-center gap-2 animate-shake">
-            <AlertCircle className="w-4 h-4 shrink-0" />
+          <div className="mb-6 p-3 rounded-lg bg-[#E22134]/15 border border-[#E22134]/40 text-[#F15E6C] text-xs font-semibold flex items-center gap-2.5 animate-shake">
+            <AlertCircle className="w-4 h-4 shrink-0 text-[#E22134]" />
             <span>{error}</span>
           </div>
         )}
 
-        {/* Login Form */}
+        {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-[#A1A1AA] mb-1.5">
-              Email or Username
+            <label className="block text-xs font-bold text-white mb-2">
+              Email or username
             </label>
-            <div className="relative">
-              <Mail className="w-4 h-4 text-[#71717A] absolute left-3.5 top-3.5" />
-              <input
-                type="text"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@example.com"
-                className="w-full pl-10 pr-4 py-3 rounded-xl bg-[#18181C] border border-[#27272A] text-sm text-white focus:outline-none focus:border-[#10B981] transition-all"
-              />
-            </div>
+            <input
+              type="text"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Email or username"
+              autoComplete="username"
+              className="w-full px-3.5 py-3 rounded-md bg-[#121212] border border-[#727272] text-sm text-white placeholder-[#727272] hover:border-white focus:border-white focus:outline-none focus:ring-1 focus:ring-white transition-colors"
+            />
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-bold uppercase tracking-wider text-[#A1A1AA]">
-                Password
-              </label>
-              <a href="#forgot" onClick={(e) => { e.preventDefault(); alert('If an account exists for this email, a password reset link has been sent.'); }} className="text-xs text-[#10B981] hover:underline">
-                Forgot?
-              </a>
-            </div>
+            <label className="block text-xs font-bold text-white mb-2">
+              Password
+            </label>
             <div className="relative">
-              <Lock className="w-4 h-4 text-[#71717A] absolute left-3.5 top-3.5" />
               <input
                 type={showPassword ? 'text' : 'password'}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full pl-10 pr-10 py-3 rounded-xl bg-[#18181C] border border-[#27272A] text-sm text-white focus:outline-none focus:border-[#10B981] transition-all"
+                placeholder="Password"
+                autoComplete="current-password"
+                className="w-full px-3.5 py-3 pr-11 rounded-md bg-[#121212] border border-[#727272] text-sm text-white placeholder-[#727272] hover:border-white focus:border-white focus:outline-none focus:ring-1 focus:ring-white transition-colors"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3.5 top-3.5 text-[#71717A] hover:text-white"
+                className="absolute right-3.5 top-3.5 text-[#A7A7A7] hover:text-white transition-colors"
+                title={showPassword ? 'Hide password' : 'Show password'}
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
           </div>
 
-          <div className="flex items-center justify-between text-xs pt-1">
-            <label className="flex items-center gap-2 cursor-pointer text-[#A1A1AA] hover:text-white">
+          <div className="flex items-center justify-between pt-1">
+            <label className="flex items-center gap-2.5 cursor-pointer text-xs text-[#A7A7A7] hover:text-white">
               <input
                 type="checkbox"
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
-                className="rounded bg-[#27272A] border-none text-[#10B981] focus:ring-0"
+                className="w-4 h-4 rounded bg-[#121212] border-[#727272] accent-[#1DB954] cursor-pointer"
               />
-              Remember me for 30 days
+              <span>Remember me</span>
             </label>
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-[#10B981] to-[#34D399] text-white font-bold text-sm green-glow hover:opacity-95 transition-all flex items-center justify-center gap-2 mt-2 disabled:opacity-50"
+            className="w-full py-3.5 rounded-full bg-[#1ED760] hover:bg-[#1fdf64] hover:scale-[1.02] active:scale-[0.98] text-black font-extrabold text-sm tracking-wide transition-all shadow-md mt-6 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
           >
             {loading ? (
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
             ) : (
-              <>
-                <LogIn className="w-4 h-4" />
-                Sign In
-              </>
+              'Log In'
             )}
           </button>
+
+          <div className="text-center pt-2">
+            <a
+              href="#forgot"
+              onClick={(e) => {
+                e.preventDefault();
+                alert('If an account exists for this email, a password reset link has been sent.');
+              }}
+              className="text-xs text-white hover:underline font-medium"
+            >
+              Forgot your password?
+            </a>
+          </div>
         </form>
 
-        {/* Footer Navigation */}
-        <div className="mt-8 text-center border-t border-white/5 pt-4 text-xs text-[#A1A1AA]">
+        {/* Divider */}
+        <div className="border-t border-[#282828] my-7" />
+
+        {/* Switch Link */}
+        <div className="text-center text-xs text-[#A7A7A7]">
           Don't have an account?{' '}
-          <Link to="/register" className="text-[#34D399] font-bold hover:underline">
-            Create Account
+          <Link
+            to="/register"
+            className="text-white font-bold hover:underline hover:text-[#1ED760] transition-colors ml-1"
+          >
+            Sign up for Musicfy
           </Link>
         </div>
       </div>
