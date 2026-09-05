@@ -1,26 +1,101 @@
 import {
+  openDB,
   downloadTrackOffline,
   getAllDownloadedTracks,
   removeTrackDownload,
   getOfflineSettings
 } from './webOfflineStorage';
 
-const DB_NAME = 'musicfy_offline_db';
-
-const openStatsStore = () => {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-};
+const CURATED_POPULAR_SEEDS = [
+  {
+    id: "fHI8X4OXluQ",
+    title: "Blinding Lights",
+    artistName: "The Weeknd",
+    thumbnail: "https://i.ytimg.com/vi/fHI8X4OXluQ/hqdefault.jpg",
+    durationSec: 200,
+    category: "Synthwave"
+  },
+  {
+    id: "34Na4j8AVgA",
+    title: "Starboy",
+    artistName: "The Weeknd",
+    thumbnail: "https://i.ytimg.com/vi/34Na4j8AVgA/hqdefault.jpg",
+    durationSec: 230,
+    category: "Pop"
+  },
+  {
+    id: "XXYlFuWEuKI",
+    title: "Save Your Tears",
+    artistName: "The Weeknd",
+    thumbnail: "https://i.ytimg.com/vi/XXYlFuWEuKI/hqdefault.jpg",
+    durationSec: 215,
+    category: "Synthpop"
+  },
+  {
+    id: "H5v3kku4y6Q",
+    title: "As It Was",
+    artistName: "Harry Styles",
+    thumbnail: "https://i.ytimg.com/vi/H5v3kku4y6Q/hqdefault.jpg",
+    durationSec: 167,
+    category: "Pop"
+  },
+  {
+    id: "TUVcZfQe-Kw",
+    title: "Levitating",
+    artistName: "Dua Lipa",
+    thumbnail: "https://i.ytimg.com/vi/TUVcZfQe-Kw/hqdefault.jpg",
+    durationSec: 203,
+    category: "Disco"
+  },
+  {
+    id: "kTJczUoc26U",
+    title: "STAY",
+    artistName: "The Kid LAROI, Justin Bieber",
+    thumbnail: "https://i.ytimg.com/vi/kTJczUoc26U/hqdefault.jpg",
+    durationSec: 141,
+    category: "Pop"
+  },
+  {
+    id: "kJQP7kiw5Fk",
+    title: "Despacito",
+    artistName: "Luis Fonsi ft. Daddy Yankee",
+    thumbnail: "https://i.ytimg.com/vi/kJQP7kiw5Fk/hqdefault.jpg",
+    durationSec: 228,
+    category: "Latin"
+  },
+  {
+    id: "09R8_2nJtjg",
+    title: "Sugar",
+    artistName: "Maroon 5",
+    thumbnail: "https://i.ytimg.com/vi/09R8_2nJtjg/hqdefault.jpg",
+    durationSec: 235,
+    category: "Pop"
+  },
+  {
+    id: "JGwWNGJdvx8",
+    title: "Shape of You",
+    artistName: "Ed Sheeran",
+    thumbnail: "https://i.ytimg.com/vi/JGwWNGJdvx8/hqdefault.jpg",
+    durationSec: 233,
+    category: "Acoustic"
+  },
+  {
+    id: "RgKAFK5djSk",
+    title: "See You Again",
+    artistName: "Wiz Khalifa ft. Charlie Puth",
+    thumbnail: "https://i.ytimg.com/vi/RgKAFK5djSk/hqdefault.jpg",
+    durationSec: 230,
+    category: "Hip-Hop"
+  }
+];
 
 export const recordWebTrackListening = async (track, completed = false) => {
-  if (!track || !track.id) return;
-  const tid = String(track.id);
+  const trackId = track?.id || track?._id || track?.trackId || track?.videoId;
+  if (!trackId) return;
+  const tid = String(trackId);
 
   try {
-    const db = await openStatsStore();
+    const db = await openDB();
     const current = await new Promise((resolve) => {
       const tx = db.transaction(['stats'], 'readonly');
       const req = tx.objectStore('stats').get(tid);
@@ -60,11 +135,12 @@ export const recordWebTrackListening = async (track, completed = false) => {
 };
 
 export const recordWebTrackLike = async (track, isLiked) => {
-  if (!track || !track.id) return;
-  const tid = String(track.id);
+  const trackId = track?.id || track?._id || track?.trackId || track?.videoId;
+  if (!trackId) return;
+  const tid = String(trackId);
 
   try {
-    const db = await openStatsStore();
+    const db = await openDB();
     const current = await new Promise((resolve) => {
       const tx = db.transaction(['stats'], 'readonly');
       const req = tx.objectStore('stats').get(tid);
@@ -116,7 +192,7 @@ export const syncWebSmartDownloads = async () => {
   if (!settings.smartDownloadEnabled) return;
 
   try {
-    const db = await openStatsStore();
+    const db = await openDB();
     const allStats = await new Promise((resolve) => {
       const tx = db.transaction(['stats'], 'readonly');
       const req = tx.objectStore('stats').getAll();
@@ -124,21 +200,77 @@ export const syncWebSmartDownloads = async () => {
       req.onerror = () => resolve([]);
     });
 
-    const targetLimit = Number(settings.smartDownloadLimit) || 50;
+    const targetLimit = Math.max(5, Number(settings.smartDownloadLimit) || 50);
+
+    // 1. Collect user listening affinity candidates
+    const candidateMap = new Map();
 
     const ranked = allStats.map((item) => ({
       ...item,
       score: calculateAffinityScore(item)
     })).sort((a, b) => b.score - a.score);
 
-    const topCandidates = ranked.slice(0, targetLimit);
-    const { allTracks, autoCachedTracks } = await getAllDownloadedTracks();
-    const downloadedIds = new Set(allTracks.map((t) => t.id));
+    ranked.forEach((item) => {
+      if (item.track && item.id) {
+        candidateMap.set(String(item.id), item.track);
+      }
+    });
 
-    // Download missing top tracks
-    for (const item of topCandidates) {
-      if (!downloadedIds.has(item.id)) {
-        await downloadTrackOffline(item.track, false);
+    // 2. If stats have fewer than targetLimit, pull from Liked Songs
+    if (candidateMap.size < targetLimit) {
+      try {
+        const rawLikes = localStorage.getItem('spicify_user_liked_tracks');
+        if (rawLikes) {
+          const likedTracks = JSON.parse(rawLikes);
+          if (Array.isArray(likedTracks)) {
+            for (const t of likedTracks) {
+              if (t && t.id && !candidateMap.has(String(t.id))) {
+                candidateMap.set(String(t.id), t);
+                if (candidateMap.size >= targetLimit) break;
+              }
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    // 3. Pull from Recent Songs
+    if (candidateMap.size < targetLimit) {
+      try {
+        const rawRecents = localStorage.getItem('spicify_user_recent_tracks');
+        if (rawRecents) {
+          const recentTracks = JSON.parse(rawRecents);
+          if (Array.isArray(recentTracks)) {
+            for (const t of recentTracks) {
+              if (t && t.id && !candidateMap.has(String(t.id))) {
+                candidateMap.set(String(t.id), t);
+                if (candidateMap.size >= targetLimit) break;
+              }
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    // 4. Seed with Curated Popular Tracks
+    if (candidateMap.size < targetLimit) {
+      for (const t of CURATED_POPULAR_SEEDS) {
+        if (!candidateMap.has(String(t.id))) {
+          candidateMap.set(String(t.id), t);
+          if (candidateMap.size >= targetLimit) break;
+        }
+      }
+    }
+
+    const topCandidates = Array.from(candidateMap.values()).slice(0, targetLimit);
+    const { allTracks, autoCachedTracks } = await getAllDownloadedTracks();
+    const downloadedIds = new Set(allTracks.map((t) => String(t.id)));
+
+    // Download missing top tracks in background
+    for (const track of topCandidates) {
+      const tid = String(track.id || track._id || track.videoId);
+      if (!downloadedIds.has(tid)) {
+        await downloadTrackOffline(track, false);
       }
     }
 
@@ -157,5 +289,7 @@ export const syncWebSmartDownloads = async () => {
         await removeTrackDownload(evict.id);
       }
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn('Smart download sync error:', e);
+  }
 };

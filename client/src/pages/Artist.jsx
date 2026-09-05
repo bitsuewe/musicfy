@@ -5,6 +5,8 @@ import { usePlayer } from '../context/PlayerContext';
 import TrackRow from '../components/TrackRow';
 import api from '../services/api';
 
+import OfflineNotice from '../components/OfflineNotice';
+
 export default function Artist({ onAddToPlaylist }) {
   const { id } = useParams();
   const { playTrack } = usePlayer();
@@ -17,6 +19,7 @@ export default function Artist({ onAddToPlaylist }) {
   }, [id]);
 
   const fetchArtist = async () => {
+    setLoading(true);
     try {
       const res = await api.get(`/music/artist/${encodeURIComponent(id || 'The Weeknd')}`);
       setProfile(res.data);
@@ -27,8 +30,20 @@ export default function Artist({ onAddToPlaylist }) {
     }
   };
 
-  if (loading || !profile) {
+  if (loading) {
     return <div className="p-8 text-center text-[#A1A1AA] animate-pulse">Loading artist universe...</div>;
+  }
+
+  if (!profile) {
+    return (
+      <div className="p-4 sm:p-8 max-w-4xl mx-auto pb-32 animate-fadeIn">
+        <OfflineNotice
+          title="Artist unavailable offline"
+          description="Exploring artist profiles and discographies requires an internet connection. Try again when back online or listen to your downloaded music."
+          onRetry={fetchArtist}
+        />
+      </div>
+    );
   }
 
   const handlePlayArtist = () => {

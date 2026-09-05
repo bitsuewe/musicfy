@@ -20,6 +20,8 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { usePlayer } from '../context/PlayerContext';
 import TrackCard from '../components/TrackCard';
+import OfflineNotice from '../components/OfflineNotice';
+import { getAllDownloadedTracks } from '../services/webOfflineStorage';
 import api from '../services/api';
 
 const MOOD_CHIPS = [
@@ -38,17 +40,48 @@ export default function Home({ onAddToPlaylist }) {
   const [heroIndex, setHeroIndex] = useState(0);
   const [recs, setRecs] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [offlineDownloads, setOfflineDownloads] = useState([]);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      fetchHomeData();
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   useEffect(() => {
     fetchHomeData();
+    getAllDownloadedTracks().then(data => {
+      setOfflineDownloads(data.allTracks || []);
+    }).catch(() => {});
   }, [user]);
 
   const fetchHomeData = async () => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setIsOnline(false);
+      setLoading(false);
+      return;
+    }
+
     try {
       const res = await api.get('/music/recommendations');
       setRecs(res.data);
+      setIsOnline(true);
     } catch (err) {
       console.error('Fetch home recommendations failed:', err);
+      if (typeof navigator !== 'undefined' && (!navigator.onLine || !err.response)) {
+        setIsOnline(false);
+      }
     } finally {
       setLoading(false);
     }
@@ -183,6 +216,47 @@ export default function Home({ onAddToPlaylist }) {
   return (
     <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-10 pb-36 animate-fadeIn select-none">
       
+      {/* 📶 YouTube-Style Offline Banner on Home */}
+      {!isOnline && (
+        <OfflineNotice
+          compact
+          onRetry={fetchHomeData}
+          title="You're offline"
+          description="Showing your downloaded music available without an internet connection."
+        />
+      )}
+
+      {/* 📥 Offline Downloads Quick Access Shelf */}
+      {offlineDownloads.length > 0 && (
+        <section className="space-y-4 bg-gradient-to-r from-[#131b17] to-[#121216] border border-[#10B981]/25 p-5 rounded-3xl shadow-lg animate-fadeIn">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#10B981] animate-pulse" />
+              <div>
+                <h2 className="text-lg sm:text-xl font-black text-white tracking-tight">
+                  {isOnline ? "Downloaded & Ready Offline" : "Your Offline Downloads"}
+                </h2>
+                <p className="text-[11px] text-[#A1A1AA] font-medium">
+                  {offlineDownloads.length} songs saved to this device • 0 data usage
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => playTrack(offlineDownloads[0], offlineDownloads)}
+              className="px-3.5 py-2 rounded-xl bg-[#10B981] hover:bg-[#059669] text-black font-extrabold text-xs flex items-center gap-1.5 shadow-md shadow-[#10B981]/20 hover:scale-105 active:scale-95 transition-all"
+            >
+              <Play className="w-3.5 h-3.5 fill-black" />
+              <span>Play All</span>
+            </button>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+            {offlineDownloads.slice(0, 6).map((track) => (
+              <TrackCard key={`home-dl-${track.id}`} track={track} onAddToPlaylist={onAddToPlaylist} />
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* 🌟 1. Header & Dynamic Mood Filter Tabs */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

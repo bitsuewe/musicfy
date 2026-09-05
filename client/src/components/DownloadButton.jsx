@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Download, CheckCircle2, Loader2 } from 'lucide-react';
+import { usePlayer } from '../context/PlayerContext';
 import {
   isTrackDownloaded,
   downloadTrackOffline,
@@ -16,12 +17,16 @@ export default function DownloadButton({
 }) {
   const [isDownloaded, setIsDownloaded] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const player = usePlayer();
+  const showToast = player?.showToast || console.log;
+
+  const trackId = track?.id || track?._id || track?.trackId || track?.videoId;
 
   useEffect(() => {
     let mounted = true;
     const checkStatus = async () => {
-      if (!track?.id) return;
-      const dl = await isTrackDownloaded(track.id);
+      if (!trackId) return;
+      const dl = await isTrackDownloaded(trackId);
       if (mounted) setIsDownloaded(dl);
     };
 
@@ -31,16 +36,17 @@ export default function DownloadButton({
       mounted = false;
       unsub();
     };
-  }, [track?.id]);
+  }, [trackId]);
 
   const handleToggle = async (e) => {
     e.stopPropagation();
-    if (!track?.id) return;
+    if (!trackId) return;
 
     if (isDownloaded) {
       if (window.confirm(`Remove "${track.title || 'this track'}" from offline downloads?`)) {
-        await removeTrackDownload(track.id);
+        await removeTrackDownload(trackId);
         setIsDownloaded(false);
+        showToast(`Removed "${track.title || 'track'}" from offline downloads`);
       }
       return;
     }
@@ -49,13 +55,18 @@ export default function DownloadButton({
 
     try {
       setIsDownloading(true);
+      showToast(`Downloading "${track.title || 'song'}" for offline playback...`);
       const success = await downloadTrackOffline(track, true);
       if (success) {
         setIsDownloaded(true);
+        showToast(`Downloaded "${track.title || 'song'}"! Ready offline.`);
         if (onComplete) onComplete();
+      } else {
+        showToast(`Could not complete download for "${track.title || 'song'}"`);
       }
     } catch (err) {
       console.warn('Download error:', err);
+      showToast(`Download failed for "${track.title || 'song'}"`);
     } finally {
       setIsDownloading(false);
     }

@@ -26,7 +26,10 @@ import CreatePlaylistModal from './components/CreatePlaylistModal';
 import AuthModal from './components/AuthModal';
 import AddToPlaylistModal from './components/AddToPlaylistModal';
 
+import { usePlayer } from './context/PlayerContext';
+
 function AppContent() {
+  const { toastMessage } = usePlayer();
   const [showCreatePlaylistModal, setShowCreatePlaylistModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [targetTrackForPlaylist, setTargetTrackForPlaylist] = useState(null);
@@ -55,11 +58,27 @@ function AppContent() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#09090B] text-[#FAFAFA] antialiased select-none">
       
-      {/* Offline Status Pill Banner */}
+      {/* YouTube Music Exact Top Offline Banner */}
       {!isOnline && (
-        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 bg-[#1C1C1E]/95 border border-[#10B981]/40 text-white px-3.5 py-1.5 rounded-full shadow-2xl backdrop-blur-xl flex items-center gap-2 text-xs font-semibold animate-pulse">
-          <WifiOff className="w-3.5 h-3.5 text-[#10B981]" />
-          <span>Offline Mode Active • Playing from local downloads</span>
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 bg-[#18181C]/95 border border-[#10B981]/50 text-white px-4 py-2 rounded-full shadow-2xl backdrop-blur-xl flex items-center gap-3 text-xs font-bold animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <WifiOff className="w-4 h-4 text-[#10B981]" />
+            <span>You're offline • Only downloaded music is available</span>
+          </div>
+          <button
+            onClick={() => navigate('/library?tab=downloads')}
+            className="px-2.5 py-1 rounded-lg bg-[#10B981] hover:bg-[#059669] text-black font-extrabold text-[11px] shadow-sm transition-all"
+          >
+            Downloads
+          </button>
+        </div>
+      )}
+
+      {/* Global Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-24 sm:bottom-20 left-1/2 -translate-x-1/2 z-50 bg-[#18181C]/95 border border-white/20 text-white px-4 py-2.5 rounded-2xl shadow-2xl backdrop-blur-xl flex items-center gap-2.5 text-xs font-bold pointer-events-none animate-fadeIn">
+          <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
+          <span>{toastMessage}</span>
         </div>
       )}
 

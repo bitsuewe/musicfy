@@ -288,6 +288,11 @@ export default function PersistentPlayer() {
                     {liked ? 'Remove from Favs' : 'Add to Favorites'}
                   </button>
 
+                  <div className="w-full px-2.5 py-1.5 rounded-lg hover:bg-white/10 flex items-center justify-between text-white transition-colors">
+                    <span>Offline Download</span>
+                    <DownloadButton track={currentTrack} size={15} />
+                  </div>
+
                   <a
                     href={`https://www.youtube.com/watch?v=${currentTrack.id}`}
                     target="_blank"

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Flame, Music, User, Radio, Sparkles, History, X, Trash2 } from 'lucide-react';
+import { Search, Flame, Music, User, Radio, Sparkles, History, X, Trash2, WifiOff } from 'lucide-react';
 import TrackCard from '../components/TrackCard';
 import TrackRow from '../components/TrackRow';
+import OfflineNotice from '../components/OfflineNotice';
 import api from '../services/api';
 
 const CATEGORIES = [
@@ -22,6 +23,7 @@ export default function Discover({ onAddToPlaylist }) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [viewMode, setViewMode] = useState('grid');
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [searchHistory, setSearchHistory] = useState(() => {
     try {
       const raw = localStorage.getItem(SEARCH_HISTORY_KEY);
@@ -30,6 +32,22 @@ export default function Discover({ onAddToPlaylist }) {
       return [];
     }
   });
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      if (query.trim()) fetchSearch(query);
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [query, category]);
 
   useEffect(() => {
     setQuery(searchParams.get('q') || '');
@@ -76,14 +94,24 @@ export default function Discover({ onAddToPlaylist }) {
   };
 
   const fetchSearch = async (q) => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setIsOnline(false);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await api.get(`/music/search`, {
         params: { q, category }
       });
       setResults(res.data.tracks || []);
+      setIsOnline(true);
     } catch (err) {
       console.error('Search request failed:', err);
+      if (typeof navigator !== 'undefined' && (!navigator.onLine || !err.response)) {
+        setIsOnline(false);
+      }
     } finally {
       setLoading(false);
     }
@@ -97,11 +125,20 @@ export default function Discover({ onAddToPlaylist }) {
   return (
     <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-6 sm:space-y-8 pb-32 animate-fadeIn select-none">
       {/* Search Header */}
-      <div>
-        <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-white tracking-tight">Discover Music</h1>
-        <p className="text-xs sm:text-sm text-[#A1A1AA] mt-1 font-medium">
-          Search across millions of YouTube music tracks, artists, and live channels.
-        </p>
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-white tracking-tight">Discover Music</h1>
+          <p className="text-xs sm:text-sm text-[#A1A1AA] mt-1 font-medium">
+            Search across millions of YouTube music tracks, artists, and live channels.
+          </p>
+        </div>
+
+        {!isOnline && (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-semibold">
+            <WifiOff className="w-3.5 h-3.5" />
+            <span>Search unavailable offline</span>
+          </div>
+        )}
       </div>
 
       {/* Category Pills & View Mode */}
@@ -124,7 +161,7 @@ export default function Discover({ onAddToPlaylist }) {
           </div>
 
           {/* View Toggle */}
-          <div className="flex items-center gap-1 p-1 bg-[#111114] border border-[#27272A] rounded-xl text-xs shrink-0">
+          <div className="flex items-center gap-1.5 p-1 bg-[#111114] border border-[#27272A] rounded-xl text-xs shrink-0">
             <button
               onClick={() => setViewMode('grid')}
               className={`px-2.5 sm:px-3 py-1 rounded-lg font-semibold ${viewMode === 'grid' ? 'bg-[#27272A] text-white' : 'text-[#A1A1AA]'}`}
@@ -195,8 +232,19 @@ export default function Discover({ onAddToPlaylist }) {
         </div>
       </div>
 
-      {/* Search Results */}
-      {loading ? (
+      {/* Main Results / Offline State */}
+      {!isOnline ? (
+        <OfflineNotice
+          title="You're offline"
+          description="Searching and discovering new YouTube music requires an active internet connection. You can enjoy your downloaded tracks while offline."
+          onRetry={() => {
+            if (typeof navigator !== 'undefined' && navigator.onLine) {
+              setIsOnline(true);
+              fetchSearch(query);
+            }
+          }}
+        />
+      ) : loading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
           {[...Array(12)].map((_, i) => (
             <div key={i} className="aspect-square bg-[#111114] rounded-2xl animate-pulse" />

@@ -1077,6 +1077,7 @@ export const PlayerProvider = ({ children }) => {
       clearQueue,
       toggleLike,
       isLiked,
+      showToast,
       setShowSidePlayer,
       toggleSidePlayer: () => setShowSidePlayer(!showSidePlayer),
       setAutoPlaySimilar: () => setAutoPlaySimilar(!autoPlaySimilar)
