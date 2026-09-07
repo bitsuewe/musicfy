@@ -9,6 +9,7 @@ export default function AuthModal({ isOpen, onClose }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [agreedTerms, setAgreedTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -17,6 +18,12 @@ export default function AuthModal({ isOpen, onClose }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    if (isRegister && !agreedTerms) {
+      setError('Please agree to the Musicfy Terms of Service and Privacy Policy to register.');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -80,7 +87,7 @@ export default function AuthModal({ isOpen, onClose }) {
           </div>
           <div>
             <h3 className="text-xl font-bold text-white">
-              {isRegister ? 'Join Spicify' : 'Welcome Back'}
+              {isRegister ? 'Join Musicfy' : 'Welcome Back'}
             </h3>
             <p className="text-xs text-[#A1A1AA]">
               {isRegister ? 'Create your personal music universe' : 'Sign in to access your library & playlists'}
@@ -158,17 +165,63 @@ export default function AuthModal({ isOpen, onClose }) {
             </div>
           </div>
 
+          {/* Terms Checkbox for Registration Mode */}
+          {isRegister && (
+            <div className="pt-1">
+              <label className="flex items-start gap-2.5 cursor-pointer text-xs text-[#A1A1AA] hover:text-white leading-relaxed select-none group">
+                <input
+                  type="checkbox"
+                  id="authmodal-terms"
+                  checked={agreedTerms}
+                  onChange={(e) => setAgreedTerms(e.target.checked)}
+                  className="w-4 h-4 rounded bg-[#18181C] border-[#27272A] accent-[#10B981] cursor-pointer mt-0.5 shrink-0"
+                />
+                <span>
+                  I agree to the{' '}
+                  <a
+                    href="/terms"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-white underline hover:text-[#34D399] font-semibold"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Terms of Service
+                  </a>{' '}
+                  and acknowledge the{' '}
+                  <a
+                    href="/privacy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-white underline hover:text-[#34D399] font-semibold"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Privacy Policy
+                  </a>.
+                </span>
+              </label>
+              {!agreedTerms && (
+                <p className="text-[10px] text-amber-400/80 mt-1 pl-6">
+                  * Terms acceptance required to sign up
+                </p>
+              )}
+            </div>
+          )}
+
           <button
             type="submit"
-            disabled={loading}
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-[#10B981] to-[#34D399] text-white font-bold text-sm green-glow hover:opacity-90 transition-all flex items-center justify-center gap-2 mt-2 disabled:opacity-50"
+            disabled={loading || (isRegister && !agreedTerms)}
+            className={`w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 mt-2 ${
+              loading || (isRegister && !agreedTerms)
+                ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700/40 opacity-60'
+                : 'bg-gradient-to-r from-[#10B981] to-[#34D399] text-white green-glow hover:opacity-90 cursor-pointer'
+            }`}
           >
             {loading ? (
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
             ) : (
               <>
                 {isRegister ? <UserPlus className="w-4 h-4" /> : <LogIn className="w-4 h-4" />}
-                {isRegister ? 'Create Account' : 'Sign In'}
+                {isRegister ? 'Create Musicfy Account' : 'Sign In'}
               </>
             )}
           </button>
@@ -176,7 +229,7 @@ export default function AuthModal({ isOpen, onClose }) {
 
         <div className="mt-4 text-center">
           <button
-            onClick={() => { setIsRegister(!isRegister); setError(''); }}
+            onClick={() => { setIsRegister(!isRegister); setError(''); setAgreedTerms(false); }}
             className="text-xs text-[#A1A1AA] hover:text-[#34D399] transition-colors"
           >
             {isRegister ? 'Already have an account? Sign In' : "Don't have an account? Register"}

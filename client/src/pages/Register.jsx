@@ -12,7 +12,7 @@ export default function Register() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [agreedTerms, setAgreedTerms] = useState(true);
+  const [agreedTerms, setAgreedTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -40,6 +40,11 @@ export default function Register() {
     e.preventDefault();
     setError('');
 
+    if (!agreedTerms) {
+      setError('You must agree to the Musicfy Terms of Service and Privacy Policy to create an account.');
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError('Passwords do not match.');
       return;
@@ -47,11 +52,6 @@ export default function Register() {
 
     if (password.length < 8) {
       setError('Password must be at least 8 characters long.');
-      return;
-    }
-
-    if (!agreedTerms) {
-      setError('Please agree to the Terms of Service to continue.');
       return;
     }
 
@@ -90,8 +90,11 @@ export default function Register() {
             <span className="text-xl font-black tracking-tight text-white">Musicfy</span>
           </Link>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            Sign up to start listening
+            Sign up for Musicfy
           </h1>
+          <p className="text-xs text-[#A1A1AA] mt-1.5">
+            Create your account to unlock unlimited streaming, custom playlists & offline downloads.
+          </p>
         </div>
 
         {/* Spotify-style Error Banner */}
@@ -128,11 +131,11 @@ export default function Register() {
               required
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter a profile name"
+              placeholder="Enter your username"
               autoComplete="username"
               className="w-full px-3.5 py-3 rounded-md bg-[#121212] border border-[#727272] text-sm text-white placeholder-[#727272] hover:border-white focus:border-white focus:outline-none focus:ring-1 focus:ring-white transition-colors"
             />
-            <p className="text-[11px] text-[#A7A7A7] mt-1">This appears on your profile.</p>
+            <p className="text-[11px] text-[#A7A7A7] mt-1">This appears on your Musicfy profile.</p>
           </div>
 
           <div>
@@ -192,27 +195,60 @@ export default function Register() {
             />
           </div>
 
-          <div className="pt-1">
-            <label className="flex items-start gap-2.5 cursor-pointer text-xs text-[#A7A7A7] hover:text-white leading-tight">
+          {/* Mandatory Terms & Conditions Checkbox */}
+          <div className="pt-2">
+            <label className="flex items-start gap-2.5 cursor-pointer text-xs text-[#A7A7A7] hover:text-white leading-relaxed select-none group">
               <input
                 type="checkbox"
+                id="musicfy-register-terms"
                 checked={agreedTerms}
                 onChange={(e) => setAgreedTerms(e.target.checked)}
-                className="w-4 h-4 rounded bg-[#121212] border-[#727272] accent-[#1DB954] cursor-pointer mt-0.5"
+                className="w-4 h-4 rounded bg-[#121212] border-[#727272] accent-[#1DB954] cursor-pointer mt-0.5 shrink-0"
               />
-              <span>I agree to the Musicfy Terms of Service and Privacy Policy.</span>
+              <span className="text-xs">
+                I agree to the{' '}
+                <Link
+                  to="/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-white underline hover:text-[#1ED760] font-semibold"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Musicfy Terms of Service
+                </Link>{' '}
+                and acknowledge the{' '}
+                <Link
+                  to="/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-white underline hover:text-[#1ED760] font-semibold"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Privacy Policy
+                </Link>.
+              </span>
             </label>
+            {!agreedTerms && (
+              <p className="text-[11px] text-amber-400/80 mt-1 pl-6">
+                * You must accept the terms & conditions above to enable registration.
+              </p>
+            )}
           </div>
 
+          {/* Submit Button: Unworkable & Disabled Until Terms Are Accepted */}
           <button
             type="submit"
-            disabled={loading}
-            className="w-full py-3.5 rounded-full bg-[#1ED760] hover:bg-[#1fdf64] hover:scale-[1.02] active:scale-[0.98] text-black font-extrabold text-sm tracking-wide transition-all shadow-md mt-6 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+            disabled={loading || !agreedTerms}
+            className={`w-full py-3.5 rounded-full font-extrabold text-sm tracking-wide transition-all shadow-md mt-6 flex items-center justify-center gap-2 ${
+              loading || !agreedTerms
+                ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700/50 opacity-60'
+                : 'bg-[#1ED760] hover:bg-[#1fdf64] hover:scale-[1.02] active:scale-[0.98] text-black cursor-pointer'
+            }`}
           >
             {loading ? (
               <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
             ) : (
-              'Sign Up'
+              'Sign Up for Musicfy'
             )}
           </button>
         </form>

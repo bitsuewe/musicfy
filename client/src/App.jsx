@@ -21,10 +21,13 @@ import Profile from './pages/Profile';
 import Admin from './pages/Admin';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import Terms from './pages/Terms';
+import NotFound from './pages/NotFound';
 
 import CreatePlaylistModal from './components/CreatePlaylistModal';
 import AuthModal from './components/AuthModal';
 import AddToPlaylistModal from './components/AddToPlaylistModal';
+import CookieBanner from './components/CookieBanner';
 
 import { usePlayer } from './context/PlayerContext';
 
@@ -198,6 +201,12 @@ function AppContent() {
                 <Admin />
               </ProtectedRoute>
             } />
+            {/* Legal & Policy Pages */}
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/privacy" element={<Terms />} />
+
+            {/* Custom 404 Catch-All Page */}
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
       </div>
@@ -214,7 +223,7 @@ function AppContent() {
         onRequestAuth={() => setShowAuthModal(true)}
       />
 
-      {/* Modals */}
+      {/* Modals & Popups */}
       <CreatePlaylistModal
         isOpen={showCreatePlaylistModal}
         onClose={() => setShowCreatePlaylistModal(false)}
@@ -231,6 +240,9 @@ function AppContent() {
         track={targetTrackForPlaylist}
         onClose={() => setTargetTrackForPlaylist(null)}
       />
+
+      {/* Cookie Consent Banner */}
+      <CookieBanner />
 
     </div>
   );

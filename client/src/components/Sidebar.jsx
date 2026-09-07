@@ -192,6 +192,23 @@ export default function Sidebar({ onRequestCreatePlaylist, onRequestAuth }) {
           </button>
         )}
       </div>
+
+      {/* Spotify-style Legal & Policies Footer */}
+      <div className="px-4 py-2.5 border-t border-[#1F1F24] bg-[#0A0A0C] flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] font-medium text-[#71717A] shrink-0">
+        <NavLink to="/terms" className="hover:text-[#FAFAFA] hover:underline transition-colors">
+          Terms
+        </NavLink>
+        <span>•</span>
+        <NavLink to="/privacy" className="hover:text-[#FAFAFA] hover:underline transition-colors">
+          Privacy
+        </NavLink>
+        <span>•</span>
+        <NavLink to="/terms#cookies" className="hover:text-[#FAFAFA] hover:underline transition-colors">
+          Cookies
+        </NavLink>
+        <span>•</span>
+        <span className="text-[9px] text-[#52525B]">© 2026 Musicfy</span>
+      </div>
     </aside>
   );
 }
