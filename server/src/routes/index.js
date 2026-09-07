@@ -10,6 +10,9 @@ import { validatePlaylistInput, validateAddTrackInput } from '../validators/play
 
 const router = Router();
 
+// Health Check Endpoint (for Render / uptime monitoring)
+router.get('/health', (req, res) => res.json({ status: 'ok', service: 'musicfy-server', timestamp: new Date().toISOString() }));
+
 // Spicify Production Authentication Endpoints
 router.post('/auth/register', validateRegisterInput, authController.register);
 router.post('/auth/login', validateLoginInput, authController.login);
