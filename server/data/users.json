@@ -27,5 +27,25 @@
     "emailVerified": false,
     "role": "USER",
     "createdAt": "2026-09-05T15:29:06.573Z"
+  },
+  {
+    "id": "usr_1788784150533_8b791f",
+    "username": "user_1788784147496",
+    "email": "user_1788784147496@musicfy.test",
+    "passwordHash": "$2b$12$BmgNY82UYDILObR5haJRPuuwv4trULCczsR95rx/e.b709qm9zSfy",
+    "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=user_1788784147496",
+    "emailVerified": false,
+    "role": "USER",
+    "createdAt": "2026-09-07T12:29:10.533Z"
+  },
+  {
+    "id": "usr_1788784382118_ugjn36",
+    "username": "user_1788784379094",
+    "email": "user_1788784379094@musicfy.test",
+    "passwordHash": "$2b$12$m8reL/QbT4ltXvJMcPKLSOqtBb6L0YwBu17a3AA609iS/VLqICiUm",
+    "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=user_1788784379094",
+    "emailVerified": false,
+    "role": "USER",
+    "createdAt": "2026-09-07T12:33:02.118Z"
   }
 ]

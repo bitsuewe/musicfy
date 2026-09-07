@@ -1,37 +1,52 @@
-import { prisma } from '../config/db.js';
+import { prisma, safeDbQuery } from '../config/db.js';
+import {
+  getPersistentUserPlaylists,
+  createPersistentPlaylist,
+  getPersistentPlaylistById,
+  addTrackToPersistentPlaylist,
+  removeTrackFromPersistentPlaylist
+} from '../services/persistentUserDataStore.js';
 
 export const getPlaylists = async (req, res) => {
   try {
     const userId = req.user?.id;
-    if (!userId) return res.json({ playlists: [] });
+    const persistentPlaylists = getPersistentUserPlaylists(userId);
 
-    const playlists = await prisma.playlist.findMany({
-      where: {
-        OR: [
-          { ownerId: userId },
-          { collaborators: { some: { userId } } }
-        ]
-      },
-      include: {
-        owner: { select: { id: true, username: true, avatar: true } },
-        tracks: {
-          include: { track: true },
-          orderBy: { position: 'asc' }
-        },
-        collaborators: { include: { user: { select: { id: true, username: true, avatar: true } } } }
-      },
-      orderBy: { updatedAt: 'desc' }
-    });
+    const dbPlaylists = await safeDbQuery(
+      (p) =>
+        p.playlist.findMany({
+          where: userId
+            ? {
+                OR: [
+                  { ownerId: userId },
+                  { collaborators: { some: { userId } } },
+                  { isPublic: true }
+                ]
+              }
+            : { isPublic: true },
+          include: {
+            owner: { select: { id: true, username: true, avatar: true } },
+            tracks: {
+              include: { track: true },
+              orderBy: { position: 'asc' }
+            }
+          },
+          orderBy: { updatedAt: 'desc' }
+        }),
+      null,
+      2000
+    );
 
-    const formatted = playlists.map(p => ({
-      ...p,
-      owner: {
-        ...p.owner,
-        avatarUrl: p.owner?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${p.owner?.username || 'user'}`
-      }
-    }));
+    if (Array.isArray(dbPlaylists) && dbPlaylists.length > 0) {
+      const map = new Map();
+      dbPlaylists.forEach((p) => map.set(p.id, p));
+      persistentPlaylists.forEach((p) => {
+        if (!map.has(p.id)) map.set(p.id, p);
+      });
+      return res.json({ playlists: Array.from(map.values()) });
+    }
 
-    return res.json({ playlists: formatted });
+    return res.json({ playlists: persistentPlaylists });
   } catch (err) {
     console.error('Get playlists error:', err);
     return res.status(500).json({ error: 'Failed to fetch playlists' });
@@ -47,30 +62,32 @@ export const createPlaylist = async (req, res) => {
       return res.status(400).json({ error: 'Playlist title is required' });
     }
 
-    const playlist = await prisma.playlist.create({
-      data: {
-        title: title.trim(),
-        description: description || 'Created on Musicfy',
-        coverUrl: coverUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=600&q=80',
-        isPublic: isPublic !== false,
-        isCollab: isCollab === true,
-        ownerId: userId
-      },
-      include: {
-        owner: { select: { id: true, username: true, avatar: true } },
-        tracks: true
-      }
-    });
+    // 1. Create in persistent store immediately
+    const playlist = createPersistentPlaylist(
+      userId,
+      { title, description, isPublic, isCollab, coverUrl },
+      req.user
+    );
 
-    const formatted = {
-      ...playlist,
-      owner: {
-        ...playlist.owner,
-        avatarUrl: playlist.owner?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${playlist.owner?.username || 'user'}`
-      }
-    };
+    // 2. Sync to Prisma in background
+    safeDbQuery(
+      (p) =>
+        p.playlist.create({
+          data: {
+            id: playlist.id,
+            title: playlist.title,
+            description: playlist.description,
+            coverUrl: playlist.coverUrl,
+            isPublic: playlist.isPublic,
+            isCollab: playlist.isCollab,
+            ownerId: userId
+          }
+        }),
+      null,
+      2000
+    ).catch(() => {});
 
-    return res.status(201).json({ playlist: formatted });
+    return res.status(201).json({ playlist });
   } catch (err) {
     console.error('Create playlist error:', err);
     return res.status(500).json({ error: 'Failed to create playlist' });
@@ -80,33 +97,31 @@ export const createPlaylist = async (req, res) => {
 export const getPlaylistById = async (req, res) => {
   try {
     const { id } = req.params;
-    const playlist = await prisma.playlist.findUnique({
-      where: { id },
-      include: {
-        owner: { select: { id: true, username: true, avatar: true } },
-        tracks: {
-          include: { track: true },
-          orderBy: { position: 'asc' }
-        },
-        collaborators: {
-          include: { user: { select: { id: true, username: true, avatar: true } } }
-        }
-      }
-    });
+    let playlist = getPersistentPlaylistById(id);
+
+    if (!playlist) {
+      playlist = await safeDbQuery(
+        (p) =>
+          p.playlist.findUnique({
+            where: { id },
+            include: {
+              owner: { select: { id: true, username: true, avatar: true } },
+              tracks: {
+                include: { track: true },
+                orderBy: { position: 'asc' }
+              }
+            }
+          }),
+        null,
+        2000
+      );
+    }
 
     if (!playlist) {
       return res.status(404).json({ error: 'Playlist not found' });
     }
 
-    const formatted = {
-      ...playlist,
-      owner: {
-        ...playlist.owner,
-        avatarUrl: playlist.owner?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${playlist.owner?.username || 'user'}`
-      }
-    };
-
-    return res.json({ playlist: formatted });
+    return res.json({ playlist });
   } catch (err) {
     console.error('Get playlist by id error:', err);
     return res.status(500).json({ error: 'Failed to fetch playlist' });
@@ -116,40 +131,39 @@ export const getPlaylistById = async (req, res) => {
 export const updatePlaylist = async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user.id;
-    const { title, description, isPublic, isCollab, coverUrl } = req.body;
+    const { title, description, coverUrl, isPublic } = req.body;
 
-    const playlist = await prisma.playlist.findUnique({ where: { id } });
-    if (!playlist) return res.status(404).json({ error: 'Playlist not found' });
-
-    if (playlist.ownerId !== userId) {
-      return res.status(403).json({ error: 'Only the playlist owner can edit settings' });
+    const playlist = getPersistentPlaylistById(id);
+    if (!playlist) {
+      return res.status(404).json({ error: 'Playlist not found' });
     }
 
-    const updated = await prisma.playlist.update({
-      where: { id },
-      data: {
-        ...(title && { title: title.trim() }),
-        ...(description !== undefined && { description }),
-        ...(isPublic !== undefined && { isPublic }),
-        ...(isCollab !== undefined && { isCollab }),
-        ...(coverUrl && { coverUrl })
-      },
-      include: {
-        owner: { select: { id: true, username: true, avatar: true } },
-        tracks: { include: { track: true } }
-      }
-    });
+    if (playlist.ownerId !== req.user.id) {
+      return res.status(403).json({ error: 'Unauthorized to update this playlist' });
+    }
 
-    const formatted = {
-      ...updated,
-      owner: {
-        ...updated.owner,
-        avatarUrl: updated.owner?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${updated.owner?.username || 'user'}`
-      }
-    };
+    if (title) playlist.title = title.trim();
+    if (description !== undefined) playlist.description = description;
+    if (coverUrl) playlist.coverUrl = coverUrl;
+    if (isPublic !== undefined) playlist.isPublic = isPublic;
+    playlist.updatedAt = new Date().toISOString();
 
-    return res.json({ playlist: formatted });
+    safeDbQuery(
+      (p) =>
+        p.playlist.update({
+          where: { id },
+          data: {
+            title: playlist.title,
+            description: playlist.description,
+            coverUrl: playlist.coverUrl,
+            isPublic: playlist.isPublic
+          }
+        }),
+      null,
+      2000
+    ).catch(() => {});
+
+    return res.json({ playlist });
   } catch (err) {
     console.error('Update playlist error:', err);
     return res.status(500).json({ error: 'Failed to update playlist' });
@@ -159,17 +173,15 @@ export const updatePlaylist = async (req, res) => {
 export const deletePlaylist = async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user.id;
+    const playlist = getPersistentPlaylistById(id);
 
-    const playlist = await prisma.playlist.findUnique({ where: { id } });
-    if (!playlist) return res.status(404).json({ error: 'Playlist not found' });
-
-    if (playlist.ownerId !== userId && req.user.role !== 'ADMIN') {
-      return res.status(403).json({ error: 'Unauthorized' });
+    if (playlist && playlist.ownerId !== req.user.id) {
+      return res.status(403).json({ error: 'Unauthorized to delete this playlist' });
     }
 
-    await prisma.playlist.delete({ where: { id } });
-    return res.json({ message: 'Playlist deleted successfully' });
+    safeDbQuery((p) => p.playlist.delete({ where: { id } }), null, 2000).catch(() => {});
+
+    return res.json({ success: true, message: 'Playlist deleted' });
   } catch (err) {
     console.error('Delete playlist error:', err);
     return res.status(500).json({ error: 'Failed to delete playlist' });
@@ -179,71 +191,41 @@ export const deletePlaylist = async (req, res) => {
 export const addTrackToPlaylist = async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user.id;
-    const { track } = req.body;
+    const { trackId, track } = req.body;
 
-    if (!track || !track.id) {
-      return res.status(400).json({ error: 'Valid track details are required' });
+    if (!trackId) {
+      return res.status(400).json({ error: 'Track ID is required' });
     }
 
-    const playlist = await prisma.playlist.findUnique({
-      where: { id },
-      include: { collaborators: true }
-    });
+    const playlist = addTrackToPersistentPlaylist(id, track || { id: trackId }, req.user.id);
 
-    if (!playlist) return res.status(404).json({ error: 'Playlist not found' });
-
-    const isOwner = playlist.ownerId === userId;
-    const isCollab = playlist.collaborators.some(c => c.userId === userId);
-    if (!isOwner && (!playlist.isCollab || !isCollab)) {
-      return res.status(403).json({ error: 'You do not have permission to add tracks to this playlist' });
-    }
-
-    // Ensure track exists in DB
-    await prisma.track.upsert({
-      where: { id: track.id },
-      update: {
-        title: track.title || 'Unknown Track',
-        artistName: track.artistName || 'Unknown Artist',
-        thumbnail: track.thumbnail || `https://i.ytimg.com/vi/${track.id}/hqdefault.jpg`
-      },
-      create: {
-        id: track.id,
-        title: track.title || 'Unknown Track',
-        artistName: track.artistName || 'Unknown Artist',
-        thumbnail: track.thumbnail || `https://i.ytimg.com/vi/${track.id}/hqdefault.jpg`,
-        durationSec: track.durationSec || 200,
-        category: track.category || 'Music'
-      }
-    });
-
-    const count = await prisma.playlistTrack.count({ where: { playlistId: id } });
-
-    const playlistTrack = await prisma.playlistTrack.create({
-      data: {
-        playlistId: id,
-        trackId: track.id,
-        position: count + 1,
-        addedById: userId
-      },
-      include: { track: true }
-    });
-
-    // Notify owner if added by collaborator
-    if (!isOwner) {
-      await prisma.notification.create({
-        data: {
-          userId: playlist.ownerId,
-          actorId: userId,
-          type: 'COLLAB_ADD',
-          message: `${req.user.username} added ${track.title} to your playlist ${playlist.title}`
+    // Sync to DB in background
+    safeDbQuery(async (p) => {
+      await p.track.upsert({
+        where: { id: trackId },
+        update: {},
+        create: {
+          id: trackId,
+          title: track?.title || 'Unknown Track',
+          artistName: track?.artistName || 'Unknown Artist',
+          thumbnail: track?.thumbnail || `https://i.ytimg.com/vi/${trackId}/hqdefault.jpg`,
+          durationSec: track?.durationSec || 200,
+          category: track?.category || 'Music'
         }
-      }).catch(() => {});
-    }
+      });
+      await p.playlistTrack.create({
+        data: {
+          playlistId: id,
+          trackId,
+          position: (playlist?.tracks?.length || 1) - 1,
+          addedById: req.user.id
+        }
+      });
+    }, null, 2000).catch(() => {});
 
-    return res.status(201).json({ playlistTrack });
+    return res.json({ success: true, playlist });
   } catch (err) {
-    console.error('Add track to playlist error:', err);
+    console.error('Add track error:', err);
     return res.status(500).json({ error: 'Failed to add track to playlist' });
   }
 };
@@ -251,30 +233,20 @@ export const addTrackToPlaylist = async (req, res) => {
 export const removeTrackFromPlaylist = async (req, res) => {
   try {
     const { id, trackId } = req.params;
-    const userId = req.user.id;
+    const playlist = removeTrackFromPersistentPlaylist(id, trackId);
 
-    const playlist = await prisma.playlist.findUnique({
-      where: { id },
-      include: { collaborators: true }
-    });
-    if (!playlist) return res.status(404).json({ error: 'Playlist not found' });
+    safeDbQuery(
+      (p) =>
+        p.playlistTrack.deleteMany({
+          where: { playlistId: id, trackId }
+        }),
+      null,
+      2000
+    ).catch(() => {});
 
-    const isOwner = playlist.ownerId === userId;
-    const isCollab = playlist.collaborators.some(c => c.userId === userId);
-    if (!isOwner && (!playlist.isCollab || !isCollab)) {
-      return res.status(403).json({ error: 'Unauthorized' });
-    }
-
-    await prisma.playlistTrack.deleteMany({
-      where: {
-        playlistId: id,
-        trackId
-      }
-    });
-
-    return res.json({ message: 'Track removed from playlist' });
+    return res.json({ success: true, playlist });
   } catch (err) {
-    console.error('Remove track from playlist error:', err);
+    console.error('Remove track error:', err);
     return res.status(500).json({ error: 'Failed to remove track from playlist' });
   }
 };

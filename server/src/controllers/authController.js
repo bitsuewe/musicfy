@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { prisma, safeDbQuery } from '../config/db.js';
 import { createSession, revokeSession, revokeAllUserSessions, hashToken, memorySessions, memoryUsers } from '../services/sessionService.js';
-import { savePersistentUser, findPersistentUser } from '../services/persistentUserStore.js';
+import { savePersistentUser, findPersistentUser, findPersistentUserByEmail, findPersistentUserByUsername } from '../services/persistentUserStore.js';
 import { createEmailVerificationToken, verifyEmailToken, createPasswordResetToken, sendMockEmail } from '../services/emailService.js';
 import { logger } from '../utils/logger.js';
 
@@ -65,8 +65,8 @@ export const register = async (req, res) => {
       });
     }
 
-    // 1. Check if Email already exists (case-insensitive) - check persistent store first
-    let existingEmailUser = findPersistentUser(normalizedEmail);
+    // 1. Check if Email already exists (case-insensitive)
+    let existingEmailUser = findPersistentUserByEmail(normalizedEmail) || findPersistentUser(normalizedEmail);
     if (!existingEmailUser) {
       existingEmailUser = await safeDbQuery(
         (p) =>
@@ -76,6 +76,9 @@ export const register = async (req, res) => {
         null,
         1500
       );
+      if (existingEmailUser) {
+        savePersistentUser(existingEmailUser);
+      }
     }
 
     if (existingEmailUser) {
@@ -89,7 +92,7 @@ export const register = async (req, res) => {
     }
 
     // 2. Check if Username already exists (case-insensitive)
-    let existingUsernameUser = findPersistentUser(trimmedUsername);
+    let existingUsernameUser = findPersistentUserByUsername(trimmedUsername);
     if (!existingUsernameUser) {
       existingUsernameUser = await safeDbQuery(
         (p) =>
@@ -99,6 +102,9 @@ export const register = async (req, res) => {
         null,
         1500
       );
+      if (existingUsernameUser) {
+        savePersistentUser(existingUsernameUser);
+      }
     }
 
     if (existingUsernameUser) {
@@ -184,7 +190,11 @@ export const login = async (req, res) => {
     const lowerInput = input.toLowerCase();
 
     // 1. Fast persistent lookup (instant 0.1ms)
-    let user = findPersistentUser(lowerInput) || findPersistentUser(input);
+    let user = findPersistentUserByEmail(lowerInput) ||
+               findPersistentUserByUsername(input) ||
+               findPersistentUserByUsername(lowerInput) ||
+               findPersistentUser(lowerInput) ||
+               findPersistentUser(input);
 
     // 2. Database lookup with safe circuit-breaker
     if (!user) {

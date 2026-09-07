@@ -1,7 +1,7 @@
 {
   "name": "Musicfy — Music Streaming",
   "short_name": "Musicfy",
-  "description": "Your little universe of music with background playback and lock-screen controls.",
+  "description": "Your little universe of music.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#09090B",
@@ -15,5 +15,8 @@
       "purpose": "any maskable"
     }
   ],
-  "categories": ["music", "entertainment"]
+  "categories": [
+    "music",
+    "entertainment"
+  ]
 }

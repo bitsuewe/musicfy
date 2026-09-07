@@ -11,6 +11,7 @@ import {
   recordWebTrackLike,
   syncWebSmartDownloads
 } from '../services/webSmartDownloadEngine';
+import { useAuth } from './AuthContext';
 
 const NativeAudio = registerPlugin('NativeAudioPlugin');
 
@@ -27,8 +28,9 @@ const DEFAULT_TRACK = {
 };
 
 const STORAGE_KEY = 'spicify_playback_state';
-const RECENTS_KEY = 'spicify_user_recent_tracks';
-const LIKES_KEY = 'spicify_user_liked_tracks';
+
+const getRecentsKey = (userId) => (userId ? `musicfy_recents_${userId}` : 'musicfy_guest_recents');
+const getLikesKey = (userId) => (userId ? `musicfy_likes_${userId}` : 'musicfy_guest_likes');
 
 // Helper to load saved playback state
 const getSavedPlaybackState = () => {
@@ -41,9 +43,9 @@ const getSavedPlaybackState = () => {
   }
 };
 
-const getSavedRecentTracks = () => {
+const getSavedRecentTracks = (userId) => {
   try {
-    const raw = localStorage.getItem(RECENTS_KEY);
+    const raw = localStorage.getItem(getRecentsKey(userId));
     if (!raw) return [];
     return JSON.parse(raw);
   } catch (e) {
@@ -51,9 +53,9 @@ const getSavedRecentTracks = () => {
   }
 };
 
-const getSavedLikedTracks = () => {
+const getSavedLikedTracks = (userId) => {
   try {
-    const raw = localStorage.getItem(LIKES_KEY);
+    const raw = localStorage.getItem(getLikesKey(userId));
     if (!raw) return [];
     return JSON.parse(raw);
   } catch (e) {
@@ -62,9 +64,13 @@ const getSavedLikedTracks = () => {
 };
 
 export const PlayerProvider = ({ children }) => {
+  const { user } = useAuth();
+  const userRef = useRef(user);
+  useEffect(() => { userRef.current = user; }, [user]);
+
   const savedState = getSavedPlaybackState();
-  const savedRecents = getSavedRecentTracks();
-  const savedLikes = getSavedLikedTracks();
+  const savedRecents = getSavedRecentTracks(user?.id);
+  const savedLikes = getSavedLikedTracks(user?.id);
 
   const [currentTrack, setCurrentTrack] = useState(savedState?.currentTrack || DEFAULT_TRACK);
   const [queue, setQueue] = useState(savedState?.queue?.length ? savedState.queue : [savedState?.currentTrack || DEFAULT_TRACK]);
@@ -325,61 +331,55 @@ export const PlayerProvider = ({ children }) => {
     return () => window.removeEventListener('beforeunload', handleUnload);
   }, [saveState]);
 
-  // Fetch Initial User Likes & Recent Playback History on login/refresh
+  // User synchronization: Re-hydrate user-scoped likes and playback history when account changes
   useEffect(() => {
-    fetchInitialData();
-    syncWebSmartDownloads().catch(() => {});
-  }, []);
+    const activeUserId = user?.id || null;
+    const localLikes = getSavedLikedTracks(activeUserId);
+    const localRecents = getSavedRecentTracks(activeUserId);
 
-  const fetchInitialData = async () => {
-    try {
-      const [likesRes, historyRes] = await Promise.allSettled([
+    setLikedTrackIds(new Set(localLikes.map(t => t.id || t.trackId)));
+    setRecentlyPlayed(localRecents);
+
+    if (activeUserId) {
+      Promise.allSettled([
         api.get('/likes'),
         api.get('/history')
-      ]);
-
-      if (likesRes.status === 'fulfilled') {
-        const dbLikes = (likesRes.value.data.likes || []).map(l => l.track).filter(Boolean);
-        if (dbLikes.length > 0) {
-          const ids = new Set(dbLikes.map(t => t.id));
-          setLikedTrackIds(ids);
-          try {
-            localStorage.setItem(LIKES_KEY, JSON.stringify(dbLikes));
-          } catch (e) {}
-        }
-      }
-
-      if (historyRes.status === 'fulfilled') {
-        const history = historyRes.value.data.history || [];
-        if (history.length > 0) {
-          const uniqueHistoryTracks = [];
-          const seen = new Set();
-          history.forEach(h => {
-            if (h.track && !seen.has(h.track.id)) {
-              seen.add(h.track.id);
-              uniqueHistoryTracks.push(h.track);
-            }
-          });
-
-          if (uniqueHistoryTracks.length > 0) {
-            setRecentlyPlayed(uniqueHistoryTracks);
+      ]).then(([likesRes, historyRes]) => {
+        if (likesRes.status === 'fulfilled' && Array.isArray(likesRes.value.data?.likes)) {
+          const dbLikes = likesRes.value.data.likes.map(l => l.track || l).filter(Boolean);
+          if (dbLikes.length > 0) {
+            const ids = new Set(dbLikes.map(t => t.id || t.trackId));
+            setLikedTrackIds(ids);
             try {
-              localStorage.setItem(RECENTS_KEY, JSON.stringify(uniqueHistoryTracks));
+              localStorage.setItem(getLikesKey(activeUserId), JSON.stringify(dbLikes));
             } catch (e) {}
+          }
+        }
 
-            if (!savedState) {
-              const latest = uniqueHistoryTracks[0];
-              setCurrentTrack(latest);
-              setQueue([latest]);
-              updateMediaSessionMetadata(latest);
+        if (historyRes.status === 'fulfilled' && Array.isArray(historyRes.value.data?.history)) {
+          const history = historyRes.value.data.history || [];
+          if (history.length > 0) {
+            const uniqueHistoryTracks = [];
+            const seen = new Set();
+            history.forEach(h => {
+              const tr = h.track || h;
+              if (tr && tr.id && !seen.has(tr.id)) {
+                seen.add(tr.id);
+                uniqueHistoryTracks.push(tr);
+              }
+            });
+
+            if (uniqueHistoryTracks.length > 0) {
+              setRecentlyPlayed(uniqueHistoryTracks);
+              try {
+                localStorage.setItem(getRecentsKey(activeUserId), JSON.stringify(uniqueHistoryTracks));
+              } catch (e) {}
             }
           }
         }
-      }
-    } catch (err) {
-      // Unauthenticated fallback
+      }).catch(() => {});
     }
-  };
+  }, [user?.id]);
 
   // Load YouTube IFrame Player API
   useEffect(() => {
@@ -484,6 +484,20 @@ export const PlayerProvider = ({ children }) => {
     });
   };
 
+  const pauseTrack = () => {
+    userInitiatedPauseRef.current = true;
+    const offlineAudioEl = typeof document !== 'undefined' ? document.getElementById('musicfy-offline-audio') : null;
+    if (offlineAudioEl) offlineAudioEl.pause();
+    if (playerRef.current && playerRef.current.pauseVideo) {
+      try { playerRef.current.pauseVideo(); } catch (e) {}
+    }
+    setIsPlaying(false);
+    stopAudioAnchor();
+    releaseWakeLock();
+    updateMediaSessionPlaybackState(false);
+    saveState();
+  };
+
   const startProgressTimer = () => {
     stopProgressTimer();
     progressIntervalRef.current = setInterval(() => {
@@ -493,6 +507,12 @@ export const PlayerProvider = ({ children }) => {
           setCurrentTime(time);
           saveState({ currentTime: time });
           updateMediaSessionPosition(time, durationRef.current);
+
+          // 🔒 Spotify guest preview restriction: non-logged-in users can only play 30 seconds
+          if (!userRef.current && time >= 30) {
+            pauseTrack();
+            showToast('Preview ended (30s) — Sign in to listen to full tracks and download offline.');
+          }
         } catch (e) {}
       }
     }, 1500);
@@ -611,12 +631,18 @@ export const PlayerProvider = ({ children }) => {
 
     saveRecentTrack(track);
 
-    api.post('/history', {
-      trackId: track.id,
-      track,
-      durationSec: track.durationSec || 200,
-      completed: false
-    }).catch(() => {});
+    if (!userRef.current) {
+      showToast('Guest preview mode (30s) • Sign in for full tracks');
+    }
+
+    if (userRef.current) {
+      api.post('/history', {
+        trackId: track.id,
+        track,
+        durationSec: track.durationSec || 200,
+        completed: false
+      }).catch(() => {});
+    }
 
     saveState({
       currentTrack: track,
@@ -643,6 +669,13 @@ export const PlayerProvider = ({ children }) => {
           setCurrentTime(t);
           saveState({ currentTime: t });
           updateMediaSessionPosition(t, durationRef.current);
+
+          // 🔒 Spotify guest preview restriction for offline audio
+          if (!userRef.current && t >= 30) {
+            offlineAudioEl.pause();
+            setIsPlaying(false);
+            showToast('Preview ended (30s) — Sign in to listen to full tracks and download offline.');
+          }
         };
         offlineAudioEl.onloadedmetadata = () => {
           if (offlineAudioEl.duration) {
@@ -990,22 +1023,28 @@ export const PlayerProvider = ({ children }) => {
     }
   };
 
-  // ❤️ Liked Songs persistence
+  // ❤️ Liked Songs persistence (strictly scoped per user)
   const toggleLike = async (track) => {
     if (!track || !track.id) return;
+    const activeUserId = userRef.current?.id || null;
+
+    if (!activeUserId) {
+      showToast('Please sign in to save songs to your Liked Songs.');
+      return;
+    }
 
     const isCurrentlyLiked = likedTrackIds.has(track.id);
     const updatedLikes = new Set(likedTrackIds);
 
-    let savedList = getSavedLikedTracks();
+    let savedList = getSavedLikedTracks(activeUserId);
 
     if (isCurrentlyLiked) {
       updatedLikes.delete(track.id);
-      savedList = savedList.filter(t => t.id !== track.id);
+      savedList = savedList.filter(t => (t.id || t.trackId) !== track.id);
       showToast(`Removed "${track.title}" from Liked Songs`);
     } else {
       updatedLikes.add(track.id);
-      savedList = [track, ...savedList.filter(t => t.id !== track.id)];
+      savedList = [track, ...savedList.filter(t => (t.id || t.trackId) !== track.id)];
       showToast(`Saved "${track.title}" to Liked Songs`);
     }
 
@@ -1013,7 +1052,7 @@ export const PlayerProvider = ({ children }) => {
     recordWebTrackLike(track, !isCurrentlyLiked);
 
     try {
-      localStorage.setItem(LIKES_KEY, JSON.stringify(savedList));
+      localStorage.setItem(getLikesKey(activeUserId), JSON.stringify(savedList));
     } catch (e) {}
 
     try {
@@ -1053,6 +1092,10 @@ export const PlayerProvider = ({ children }) => {
       recentlyPlayed,
       toastMessage,
       showSidePlayer,
+      isGuest: !user,
+      isPreview: !user,
+      pauseTrack,
+      showToast,
       autoPlaySimilar,
       backgroundPlayEnabled: true,
       keepScreenAwake,

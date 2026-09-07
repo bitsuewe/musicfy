@@ -124,6 +124,30 @@ export const findPersistentUser = (identifier) => {
   return null;
 };
 
+export const findPersistentUserByEmail = (email) => {
+  if (!email) return null;
+  const lower = String(email).trim().toLowerCase();
+  loadUsersFromDisk();
+  for (const u of memoryUsers.values()) {
+    if (u.email?.trim().toLowerCase() === lower) {
+      return u;
+    }
+  }
+  return null;
+};
+
+export const findPersistentUserByUsername = (username) => {
+  if (!username) return null;
+  const lower = String(username).trim().toLowerCase();
+  loadUsersFromDisk();
+  for (const u of memoryUsers.values()) {
+    if (u.username?.trim().toLowerCase() === lower) {
+      return u;
+    }
+  }
+  return null;
+};
+
 export const findPersistentUserById = (userId) => {
   if (!userId) return null;
   for (const u of memoryUsers.values()) {

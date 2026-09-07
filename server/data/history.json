@@ -1,0 +1,32 @@
+[
+  {
+    "id": "hist_1788784386930_bv2ygl",
+    "userId": "usr_1788784382118_ugjn36",
+    "trackId": "test_song_01",
+    "track": {
+      "id": "test_song_01",
+      "title": "Test Song 1",
+      "artistName": "Test Artist",
+      "thumbnail": "https://example.com/thumb.jpg",
+      "durationSec": 210
+    },
+    "durationSec": 210,
+    "completed": true,
+    "playedAt": "2026-09-07T12:33:06.930Z"
+  },
+  {
+    "id": "hist_1788784155239_cvshzj",
+    "userId": "usr_1788784150533_8b791f",
+    "trackId": "test_song_01",
+    "track": {
+      "id": "test_song_01",
+      "title": "Test Song 1",
+      "artistName": "Test Artist",
+      "thumbnail": "https://example.com/thumb.jpg",
+      "durationSec": 210
+    },
+    "durationSec": 210,
+    "completed": true,
+    "playedAt": "2026-09-07T12:29:15.239Z"
+  }
+]

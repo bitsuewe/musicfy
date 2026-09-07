@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Download, CheckCircle2, Loader2 } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
+import { useAuth } from '../context/AuthContext';
 import {
   isTrackDownloaded,
   downloadTrackOffline,
@@ -17,6 +18,7 @@ export default function DownloadButton({
 }) {
   const [isDownloaded, setIsDownloaded] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const { user } = useAuth();
   const player = usePlayer();
   const showToast = player?.showToast || console.log;
 
@@ -41,6 +43,11 @@ export default function DownloadButton({
   const handleToggle = async (e) => {
     e.stopPropagation();
     if (!trackId) return;
+
+    if (!user) {
+      showToast('Please sign in to download songs for offline listening.');
+      return;
+    }
 
     if (isDownloaded) {
       if (window.confirm(`Remove "${track.title || 'this track'}" from offline downloads?`)) {

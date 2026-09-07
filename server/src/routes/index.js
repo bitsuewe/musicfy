@@ -28,7 +28,7 @@ router.get('/music/trending', musicController.getTrending);
 router.get('/music/artist/:id', musicController.getArtist);
 router.get('/music/recommendations', optionalAuth, musicController.getRecommendations);
 router.get('/music/stream/:id', musicController.streamTrack);
-router.get('/music/download/:id', musicController.downloadTrack);
+router.get('/music/download/:id', requireAuth, musicController.downloadTrack);
 
 // Playlist Endpoints
 router.get('/playlists', optionalAuth, playlistController.getPlaylists);
