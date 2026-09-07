@@ -141,6 +141,34 @@ export default function Discover({ onAddToPlaylist }) {
         )}
       </div>
 
+      {/* Prominent Search Input Bar */}
+      <div className="relative max-w-2xl">
+        <Search className="w-4 h-4 sm:w-5 sm:h-5 absolute left-4 top-1/2 -translate-y-1/2 text-[#A1A1AA]" />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setSearchParams(e.target.value.trim() ? { q: e.target.value.trim() } : {});
+          }}
+          placeholder="What do you want to play? Search songs, artists, or genres..."
+          className="w-full pl-11 sm:pl-12 pr-10 py-3 sm:py-3.5 rounded-2xl bg-[#111114] border border-[#27272A] hover:border-[#3F3F46] focus:border-[#10B981] text-xs sm:text-sm md:text-base text-white placeholder-[#71717A] focus:outline-none transition-all shadow-inner"
+        />
+        {query && (
+          <button
+            type="button"
+            onClick={() => {
+              setQuery('');
+              setSearchParams({});
+            }}
+            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors"
+            title="Clear search"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
       {/* Category Pills & View Mode */}
       <div className="space-y-3 sm:space-y-4">
         <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -251,10 +279,50 @@ export default function Discover({ onAddToPlaylist }) {
           ))}
         </div>
       ) : results.length === 0 ? (
-        <div className="py-20 text-center space-y-3">
-          <Music className="w-12 h-12 text-[#27272A] mx-auto" />
-          <h3 className="text-lg font-bold text-white">No tracks found</h3>
-          <p className="text-xs text-[#A1A1AA]">Try searching for a different song title or artist name.</p>
+        <div className="py-16 sm:py-24 text-center max-w-md mx-auto space-y-4 animate-fadeIn">
+          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mx-auto shadow-xl">
+            <Search className="w-8 h-8 sm:w-10 sm:h-10 text-[#71717A]" />
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+              {query.trim() ? `Can't find "${query.trim()}"` : "Can't find this track"}
+            </h3>
+            <p className="text-xs sm:text-sm text-[#A1A1AA] leading-relaxed">
+              {query.trim()
+                ? `Please make sure your words are spelled correctly, or try searching for another artist or song title.`
+                : "Try searching for your favorite artist, song, or genre."}
+            </p>
+          </div>
+          {query.trim() && (
+            <div className="pt-2 flex items-center justify-center">
+              <button
+                onClick={() => {
+                  setQuery('');
+                  setSearchParams({});
+                }}
+                className="px-5 py-2.5 rounded-full bg-[#10B981] hover:bg-[#059669] text-black font-bold text-xs sm:text-sm transition-all shadow-lg hover:scale-105 active:scale-95"
+              >
+                Clear Search
+              </button>
+            </div>
+          )}
+          {/* Helpful suggestions */}
+          <div className="pt-6 border-t border-white/5 space-y-3">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#71717A]">
+              Popular Searches
+            </span>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {['The Weeknd', 'Billie Eilish', 'Taylor Swift', 'Coldplay', 'Drake', 'Synthwave'].map((suggested) => (
+                <button
+                  key={suggested}
+                  onClick={() => handleKeywordClick(suggested)}
+                  className="px-3.5 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 hover:border-[#10B981]/50 text-xs text-[#D4D4D8] hover:text-white transition-all active:scale-95"
+                >
+                  {suggested}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">

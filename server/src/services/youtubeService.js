@@ -245,14 +245,17 @@ export const searchYouTubeTracks = async (query, category = 'all') => {
     return liveResults;
   }
 
-  // 3. Fallback Curated Dataset
-  const qLower = query.toLowerCase();
+  // 3. Fallback Curated Dataset - ONLY return tracks that ACTUALLY match the search query!
+  const qLower = query.toLowerCase().trim();
   const filtered = FALLBACK_TRACKS.filter(t =>
     t.title.toLowerCase().includes(qLower) ||
     t.artistName.toLowerCase().includes(qLower) ||
     t.category.toLowerCase().includes(qLower)
   );
-  const finalResults = filtered.length > 0 ? filtered : FALLBACK_TRACKS;
+
+  // If no match was found, return an empty array [] so the UI can display "Can't find this track"
+  // NEVER dump unrelated fallback tracks like Blinding Lights or Despacito
+  const finalResults = filtered.length > 0 ? filtered : [];
   searchCache.set(cacheKey, { data: finalResults, timestamp: Date.now() });
   return finalResults;
 };
