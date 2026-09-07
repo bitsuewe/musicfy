@@ -2,18 +2,37 @@ import 'dotenv/config';
 import pkg from '@prisma/client/default.js';
 const { PrismaClient } = pkg;
 
-const SUPABASE_VERIFIED_URL = "postgresql://postgres.bnfjhtaovbrdyagumumx:bwskIKPN7S6VtyIE@aws-0-us-west-2.pooler.supabase.com:6543/postgres?pgbouncer=true";
+const SUPABASE_VERIFIED_URL = "postgresql://postgres.ntymdlksqavumuqkshce:lXvzp4gNFJF22K5v@aws-0-us-east-2.pooler.supabase.com:6543/postgres?pgbouncer=true";
 
-let dbUrl = (process.env.DATABASE_URL || '').trim() || SUPABASE_VERIFIED_URL;
+export const normalizeDatabaseUrl = (rawUrl) => {
+  let url = (rawUrl || '').trim() || SUPABASE_VERIFIED_URL;
 
-// Auto-correct pooler port 5432 to 6543 with pgbouncer=true if present
-if (dbUrl.includes('pooler.supabase.com:5432')) {
-  dbUrl = dbUrl.replace('pooler.supabase.com:5432', 'pooler.supabase.com:6543');
-  if (!dbUrl.includes('pgbouncer=true')) {
-    dbUrl += (dbUrl.includes('?') ? '&' : '?') + 'pgbouncer=true';
+  // If URL uses IPv6-only direct host db.<ref>.supabase.co:5432, auto-convert to IPv4 pooler
+  const directMatch = url.match(/postgresql:\/\/([^:]+):(.+)@db\.([a-z0-9]+)\.supabase\.co(?::\d+)?\/(.*)/i);
+  if (directMatch) {
+    const [, user, password, projectRef, rest] = directMatch;
+    const regionMap = {
+      ntymdlksqavumuqkshce: 'us-east-2',
+      bnfjhtaovbrdyagumumx: 'us-west-2'
+    };
+    const region = regionMap[projectRef] || 'us-east-2';
+    const poolerUser = user.includes('.') ? user : `${user}.${projectRef}`;
+    const dbName = rest ? rest.split('?')[0] : 'postgres';
+    url = `postgresql://${poolerUser}:${password}@aws-0-${region}.pooler.supabase.com:6543/${dbName}?pgbouncer=true`;
   }
-}
 
+  // Auto-correct pooler port 5432 to 6543 with pgbouncer=true if present
+  if (url.includes('pooler.supabase.com:5432')) {
+    url = url.replace('pooler.supabase.com:5432', 'pooler.supabase.com:6543');
+    if (!url.includes('pgbouncer=true')) {
+      url += (url.includes('?') ? '&' : '?') + 'pgbouncer=true';
+    }
+  }
+
+  return url;
+};
+
+let dbUrl = normalizeDatabaseUrl(process.env.DATABASE_URL);
 process.env.DATABASE_URL = dbUrl;
 
 const globalForPrisma = global;
