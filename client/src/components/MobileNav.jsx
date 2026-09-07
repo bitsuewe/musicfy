@@ -31,7 +31,16 @@ export default function MobileNav({ onRequestCreatePlaylist, onRequestAuth }) {
         <span>Create</span>
       </button>
 
-      <NavLink to="/library" className={navClass}>
+      <NavLink
+        to="/library"
+        onClick={(e) => {
+          if (!user) {
+            e.preventDefault();
+            onRequestAuth();
+          }
+        }}
+        className={navClass}
+      >
         <Library className="w-5 h-5" />
         <span>Library</span>
       </NavLink>

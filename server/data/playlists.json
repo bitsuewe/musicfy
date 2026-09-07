@@ -1,36 +1,19 @@
 [
   {
-    "id": "pl_1788784387496_gcg179",
+    "id": "pl_1788812908464_rewds1",
     "title": "My First Test Playlist",
     "description": "Testing user playlist count",
     "coverUrl": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=600&q=80",
     "isPublic": true,
     "isCollab": false,
-    "ownerId": "usr_1788784382118_ugjn36",
+    "ownerId": "9ad66e54-455e-447c-aba7-35e2653af18c",
     "owner": {
-      "id": "usr_1788784382118_ugjn36",
-      "username": "user_1788784379094",
-      "avatarUrl": "https://api.dicebear.com/7.x/bottts/svg?seed=user_1788784379094"
+      "id": "9ad66e54-455e-447c-aba7-35e2653af18c",
+      "username": "user_1788812893930",
+      "avatarUrl": "https://api.dicebear.com/7.x/bottts/svg?seed=user_1788812893930"
     },
     "tracks": [],
-    "createdAt": "2026-09-07T12:33:07.496Z",
-    "updatedAt": "2026-09-07T12:33:07.496Z"
-  },
-  {
-    "id": "pl_1788784156384_of9crs",
-    "title": "My First Test Playlist",
-    "description": "Testing user playlist count",
-    "coverUrl": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=600&q=80",
-    "isPublic": true,
-    "isCollab": false,
-    "ownerId": "usr_1788784150533_8b791f",
-    "owner": {
-      "id": "usr_1788784150533_8b791f",
-      "username": "user_1788784147496",
-      "avatarUrl": "https://api.dicebear.com/7.x/bottts/svg?seed=user_1788784147496"
-    },
-    "tracks": [],
-    "createdAt": "2026-09-07T12:29:16.384Z",
-    "updatedAt": "2026-09-07T12:29:16.385Z"
+    "createdAt": "2026-09-07T20:28:28.465Z",
+    "updatedAt": "2026-09-07T20:28:28.465Z"
   }
 ]

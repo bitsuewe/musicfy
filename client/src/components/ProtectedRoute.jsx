@@ -15,7 +15,7 @@ export const ProtectedRoute = ({ children }) => {
   }
 
   if (!user && !loading) {
-    return <Navigate to="/" state={{ from: location }} replace />;
+    return <Navigate to="/" state={{ from: location, authWarning: true, reason: location.pathname }} replace />;
   }
 
   return children;

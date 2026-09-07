@@ -1,7 +1,7 @@
 [
   {
-    "id": "like_1788784385808_e7kr75",
-    "userId": "usr_1788784382118_ugjn36",
+    "id": "like_1788812904414_uc4sbk",
+    "userId": "9ad66e54-455e-447c-aba7-35e2653af18c",
     "trackId": "test_song_01",
     "track": {
       "id": "test_song_01",
@@ -10,19 +10,6 @@
       "thumbnail": "https://example.com/thumb.jpg",
       "durationSec": 210
     },
-    "createdAt": "2026-09-07T12:33:05.808Z"
-  },
-  {
-    "id": "like_1788784153212_dhpy7o",
-    "userId": "usr_1788784150533_8b791f",
-    "trackId": "test_song_01",
-    "track": {
-      "id": "test_song_01",
-      "title": "Test Song 1",
-      "artistName": "Test Artist",
-      "thumbnail": "https://example.com/thumb.jpg",
-      "durationSec": 210
-    },
-    "createdAt": "2026-09-07T12:29:13.212Z"
+    "createdAt": "2026-09-07T20:28:24.414Z"
   }
 ]

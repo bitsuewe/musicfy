@@ -56,7 +56,17 @@ export default function Sidebar({ onRequestCreatePlaylist, onRequestAuth }) {
           <Compass className="w-4 h-4" />
           Search
         </NavLink>
-        <NavLink to="/library" className={navItemClass}>
+        <NavLink
+          to="/library"
+          onClick={(e) => {
+            if (!user) {
+              e.preventDefault();
+              navigate('/', { state: { authWarning: true, reason: 'library' } });
+              onRequestAuth();
+            }
+          }}
+          className={navItemClass}
+        >
           <Library className="w-4 h-4" />
           Your Library
         </NavLink>
@@ -66,41 +76,61 @@ export default function Sidebar({ onRequestCreatePlaylist, onRequestAuth }) {
 
       {/* Playlists & Library Section */}
       <div className="px-3 py-1 flex-1 overflow-y-auto custom-scrollbar min-h-0">
-        <div className="flex items-center justify-between px-2 mb-2">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[#B3B3B3]">
-            Playlists
-          </span>
-          <button
-            onClick={onRequestCreatePlaylist}
-            className="p-1 rounded-full text-[#B3B3B3] hover:text-[#1DB954] hover:bg-[#282828] transition-colors"
-            title="Create Playlist"
-          >
-            <PlusSquare className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="space-y-1">
-          <NavLink to="/playlist/liked" className={navItemClass}>
-            <div className="w-5 h-5 rounded bg-gradient-to-br from-indigo-600 to-[#1DB954] flex items-center justify-center shrink-0">
-              <Sparkles className="w-3 h-3 text-white" />
+        {user ? (
+          <>
+            <div className="flex items-center justify-between px-2 mb-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#B3B3B3]">
+                Playlists
+              </span>
+              <button
+                onClick={onRequestCreatePlaylist}
+                className="p-1 rounded-full text-[#B3B3B3] hover:text-[#1DB954] hover:bg-[#282828] transition-colors"
+                title="Create Playlist"
+              >
+                <PlusSquare className="w-4 h-4" />
+              </button>
             </div>
-            <span className="truncate">Liked Songs</span>
-          </NavLink>
 
-          {/* User's Actual Created Playlists */}
-          {playlists.map((pl) => (
-            <NavLink
-              key={pl.id}
-              to={`/playlist/${pl.id}`}
-              className={navItemClass}
+            <div className="space-y-1">
+              <NavLink to="/playlist/liked" className={navItemClass}>
+                <div className="w-5 h-5 rounded bg-gradient-to-br from-indigo-600 to-[#1DB954] flex items-center justify-center shrink-0">
+                  <Sparkles className="w-3 h-3 text-white" />
+                </div>
+                <span className="truncate">Liked Songs</span>
+              </NavLink>
+
+              {/* User's Actual Created Playlists */}
+              {playlists.map((pl) => (
+                <NavLink
+                  key={pl.id}
+                  to={`/playlist/${pl.id}`}
+                  className={navItemClass}
+                >
+                  <div className="w-5 h-5 rounded bg-[#18181C] border border-white/10 flex items-center justify-center shrink-0">
+                    <ListMusic className="w-3 h-3 text-[#1DB954]" />
+                  </div>
+                  <span className="truncate">{pl.title}</span>
+                </NavLink>
+              ))}
+            </div>
+          </>
+        ) : (
+          /* Guest Spotify Prompt: No Liked Songs or Playlists shown */
+          <div className="bg-[#18181C] border border-white/10 rounded-2xl p-4 space-y-3 mt-1 shadow-lg">
+            <div className="space-y-1">
+              <p className="text-xs font-black text-white">Create your first playlist</p>
+              <p className="text-[11px] text-[#A1A1AA] leading-relaxed">
+                It's easy, we'll help you. Sign in to save liked songs and create playlists.
+              </p>
+            </div>
+            <button
+              onClick={onRequestAuth}
+              className="w-full py-2 px-3.5 rounded-full bg-white hover:bg-white/90 text-black font-extrabold text-xs transition-all active:scale-95 cursor-pointer shadow-md"
             >
-              <div className="w-5 h-5 rounded bg-[#18181C] border border-white/10 flex items-center justify-center shrink-0">
-                <ListMusic className="w-3 h-3 text-[#1DB954]" />
-              </div>
-              <span className="truncate">{pl.title}</span>
-            </NavLink>
-          ))}
-        </div>
+              Sign In to Create
+            </button>
+          </div>
+        )}
 
         <div className="mt-5 mb-2 px-2">
           <span className="text-[10px] font-bold uppercase tracking-wider text-[#B3B3B3]">

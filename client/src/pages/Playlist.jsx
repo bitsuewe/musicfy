@@ -27,16 +27,20 @@ export default function Playlist({ onAddToPlaylist }) {
     setLoading(true);
     try {
       if (id === 'liked') {
+        if (!user) {
+          navigate('/', { state: { authWarning: true, reason: 'liked' } });
+          return;
+        }
         let tracks = [];
         try {
           const res = await api.get('/likes');
           tracks = (res.data.likes || []).map(l => l.track).filter(Boolean);
         } catch (e) {}
 
-        // Fallback to local storage if DB is empty or unauthenticated
-        if (tracks.length === 0) {
+        // Fallback to user-scoped local storage if DB is empty
+        if (tracks.length === 0 && user?.id) {
           try {
-            const rawLocal = localStorage.getItem('spicify_user_liked_tracks');
+            const rawLocal = localStorage.getItem(`musicfy_likes_${user.id}`) || localStorage.getItem('spicify_user_liked_tracks');
             if (rawLocal) tracks = JSON.parse(rawLocal);
           } catch (e) {}
         }

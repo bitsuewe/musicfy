@@ -1,51 +1,56 @@
 [
   {
-    "id": "usr_1788610202208_nownp7",
-    "username": "flowuser_1788610199775",
-    "email": "flow_test_1788610199775@musicfy.app",
-    "passwordHash": "$2b$12$CwzKpQaP7VMsvTqInRdL/OZspPSXnG2BpjNe/C2GAjkCm7JCWaebm",
-    "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=flowuser_1788610199775",
-    "emailVerified": false,
-    "role": "USER",
-    "createdAt": "2026-09-05T12:10:02.209Z"
-  },
-  {
-    "id": "7a42ed2e-afc9-4d15-853d-f2d5ccef3b2c",
+    "id": "044e5e81-5398-442e-ba67-7993558b2966",
     "username": "MusicfyAdmin",
     "email": "admin@musicfy.com",
+    "passwordHash": "$2b$12$Kd1GLSgQbh77COP191gGb.nN4ptB6RvnXQQEFsQSmEw918Z725wsy",
     "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=MusicfyAdmin",
     "emailVerified": false,
     "role": "ADMIN",
-    "createdAt": "2026-08-17T10:55:20.324Z"
+    "createdAt": "2026-09-07T20:12:35.601Z"
   },
   {
-    "id": "usr_1788622146573_94kfjr",
-    "username": "tester_143055",
-    "email": "authtest_1788622143055@example.com",
-    "passwordHash": "$2b$12$ES/cK5ON7rZ2waHJ6E0F9ObAvQ7TKFCMyIVwVBfesHMqf4w2WyCvi",
-    "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=tester_143055",
+    "id": "1d2c3d6b-1256-45cd-bce6-41d299b20d57",
+    "username": "Alex",
+    "email": "alex@musicfy.com",
+    "passwordHash": "$2b$12$Kd1GLSgQbh77COP191gGb.nN4ptB6RvnXQQEFsQSmEw918Z725wsy",
+    "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=Alex",
     "emailVerified": false,
     "role": "USER",
-    "createdAt": "2026-09-05T15:29:06.573Z"
+    "createdAt": "2026-09-07T20:12:36.311Z"
   },
   {
-    "id": "usr_1788784150533_8b791f",
-    "username": "user_1788784147496",
-    "email": "user_1788784147496@musicfy.test",
-    "passwordHash": "$2b$12$BmgNY82UYDILObR5haJRPuuwv4trULCczsR95rx/e.b709qm9zSfy",
-    "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=user_1788784147496",
+    "id": "a11d2fb0-8f40-497b-a81f-b086dcce63b0",
+    "username": "Sam",
+    "email": "sam@musicfy.com",
+    "passwordHash": "$2b$12$Kd1GLSgQbh77COP191gGb.nN4ptB6RvnXQQEFsQSmEw918Z725wsy",
+    "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=Sam",
     "emailVerified": false,
     "role": "USER",
-    "createdAt": "2026-09-07T12:29:10.533Z"
+    "createdAt": "2026-09-07T20:12:36.699Z"
   },
   {
-    "id": "usr_1788784382118_ugjn36",
-    "username": "user_1788784379094",
-    "email": "user_1788784379094@musicfy.test",
-    "passwordHash": "$2b$12$m8reL/QbT4ltXvJMcPKLSOqtBb6L0YwBu17a3AA609iS/VLqICiUm",
-    "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=user_1788784379094",
+    "id": "c57fd56d-590d-4354-8f1a-7de9b7fe9211",
+    "email": "supa_test_1788812181860@test.com",
+    "username": "supa_181860",
+    "passwordHash": "$2b$12$KfKykQkDBhSeJ0oz1W99JOoob29xITCFIe5Z.gnF9PnN3.zEbDRv6",
+    "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=supa_181860",
     "emailVerified": false,
+    "bio": "",
     "role": "USER",
-    "createdAt": "2026-09-07T12:33:02.118Z"
+    "createdAt": "2026-09-07T20:16:24.675Z",
+    "updatedAt": "2026-09-07T20:16:24.675Z"
+  },
+  {
+    "id": "9ad66e54-455e-447c-aba7-35e2653af18c",
+    "email": "user_1788812893930@musicfy.test",
+    "username": "user_1788812893930",
+    "passwordHash": "$2b$12$U/sC3sg3s8S0peJ0lKyiLe/GDiAPbkmq4mvIbuwC/rzfM66M0.wFq",
+    "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=user_1788812893930",
+    "emailVerified": false,
+    "bio": "",
+    "role": "USER",
+    "createdAt": "2026-09-07T20:28:19.347Z",
+    "updatedAt": "2026-09-07T20:28:19.347Z"
   }
 ]

@@ -1,32 +1,39 @@
 import api from './api';
 
-const PLAYLISTS_STORAGE_KEY = 'spicify_user_playlists';
+const getPlaylistsKey = (userId) => (userId ? `musicfy_playlists_${userId}` : null);
 
-export const getLocalPlaylists = () => {
+export const getLocalPlaylists = (userId) => {
   try {
-    const raw = localStorage.getItem(PLAYLISTS_STORAGE_KEY);
+    if (!userId) return [];
+    const key = getPlaylistsKey(userId);
+    const raw = localStorage.getItem(key) || localStorage.getItem('spicify_user_playlists');
     return raw ? JSON.parse(raw) : [];
   } catch (e) {
     return [];
   }
 };
 
-export const saveLocalPlaylists = (playlists) => {
+export const saveLocalPlaylists = (playlists, userId) => {
   try {
-    localStorage.setItem(PLAYLISTS_STORAGE_KEY, JSON.stringify(playlists));
+    if (!userId) return;
+    const key = getPlaylistsKey(userId);
+    if (key) localStorage.setItem(key, JSON.stringify(playlists));
   } catch (e) {}
 };
 
 export const fetchAllPlaylists = async (user) => {
-  const localList = getLocalPlaylists();
+  // Non-signed in guests do NOT have playlists
+  if (!user || !user.id) {
+    return [];
+  }
+
+  const localList = getLocalPlaylists(user.id);
   let dbList = [];
 
-  if (user) {
-    try {
-      const res = await api.get('/playlists');
-      dbList = res.data.playlists || [];
-    } catch (e) {}
-  }
+  try {
+    const res = await api.get('/playlists');
+    dbList = res.data.playlists || [];
+  } catch (e) {}
 
   // Merge and deduplicate
   const map = new Map();
@@ -39,6 +46,10 @@ export const fetchAllPlaylists = async (user) => {
 };
 
 export const createNewPlaylist = async ({ title, description, isCollab = false, isPublic = true }, user) => {
+  if (!user || !user.id) {
+    throw new Error('Please sign in to create playlists');
+  }
+
   const newId = `pl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const localObj = {
     id: newId,

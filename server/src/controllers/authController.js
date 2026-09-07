@@ -74,7 +74,7 @@ export const register = async (req, res) => {
             where: { email: { equals: normalizedEmail, mode: 'insensitive' } }
           }),
         null,
-        1500
+        10000
       );
       if (existingEmailUser) {
         savePersistentUser(existingEmailUser);
@@ -100,7 +100,7 @@ export const register = async (req, res) => {
             where: { username: { equals: trimmedUsername, mode: 'insensitive' } }
           }),
         null,
-        1500
+        10000
       );
       if (existingUsernameUser) {
         savePersistentUser(existingUsernameUser);
@@ -120,7 +120,7 @@ export const register = async (req, res) => {
     // 🔒 BCRYPT PASSWORD HASHING
     const passwordHash = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
 
-    const user = {
+    let user = {
       id: `usr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
       username: trimmedUsername,
       email: normalizedEmail,
@@ -131,15 +131,11 @@ export const register = async (req, res) => {
       createdAt: new Date().toISOString()
     };
 
-    // Save to persistent store immediately
-    savePersistentUser(user);
-
-    // Sync to database synchronously with circuit-breaker to guarantee relational integrity
-    await safeDbQuery(
+    // Save directly to Supabase first so user is permanent across deployments
+    const dbUser = await safeDbQuery(
       (p) =>
         p.user.create({
           data: {
-            id: user.id,
             username: trimmedUsername,
             email: normalizedEmail,
             passwordHash,
@@ -148,12 +144,24 @@ export const register = async (req, res) => {
           }
         }),
       null,
-      2500
+      10000
     ).catch((err) => {
-      logger.warn('Prisma background user create note:', err.message);
+      logger.warn('Prisma user create note:', err.message);
+      return null;
     });
 
-    // Create session & HTTP-only cookie
+    if (dbUser) {
+      user = {
+        ...user,
+        id: dbUser.id,
+        createdAt: dbUser.createdAt ? dbUser.createdAt.toISOString() : user.createdAt
+      };
+    }
+
+    // Save to persistent local store as secondary cache
+    savePersistentUser(user);
+
+    // Create session & HTTP-only cookie (persisted to Supabase)
     const { rawToken } = await createSession(user.id);
     res.cookie(COOKIE_NAME, rawToken, COOKIE_OPTIONS);
 
@@ -189,32 +197,33 @@ export const login = async (req, res) => {
 
     const lowerInput = input.toLowerCase();
 
-    // 1. Fast persistent lookup (instant 0.1ms)
-    let user = findPersistentUserByEmail(lowerInput) ||
-               findPersistentUserByUsername(input) ||
-               findPersistentUserByUsername(lowerInput) ||
-               findPersistentUser(lowerInput) ||
-               findPersistentUser(input);
+    // 1. Primary: Query Supabase directly (case-insensitive for both email and username)
+    let user = await safeDbQuery(
+      (p) =>
+        p.user.findFirst({
+          where: {
+            OR: [
+              { email: { equals: lowerInput, mode: 'insensitive' } },
+              { username: { equals: input, mode: 'insensitive' } },
+              { username: { equals: lowerInput, mode: 'insensitive' } }
+            ]
+          }
+        }),
+      null,
+      10000
+    );
 
-    // 2. Database lookup with safe circuit-breaker
-    if (!user) {
-      user = await safeDbQuery(
-        (p) =>
-          p.user.findFirst({
-            where: {
-              OR: [
-                { email: { equals: lowerInput, mode: 'insensitive' } },
-                { username: { equals: input, mode: 'insensitive' } }
-              ]
-            }
-          }),
-        null,
-        1500
-      );
-      if (user) {
-        savePersistentUser(user);
-      }
+    if (user) {
+      savePersistentUser(user);
+    } else {
+      // 2. Fallback to local persistent cache
+      user = findPersistentUserByEmail(lowerInput) ||
+             findPersistentUserByUsername(input) ||
+             findPersistentUserByUsername(lowerInput) ||
+             findPersistentUser(lowerInput) ||
+             findPersistentUser(input);
     }
+
 
     if (!user) {
       await bcrypt.compare(password, '$2a$12$eImiTXuWVxfM37uY4JANjO56E2452586796982928372625242524');

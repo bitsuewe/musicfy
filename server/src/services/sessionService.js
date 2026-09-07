@@ -27,11 +27,11 @@ export const createSession = async (userId) => {
   const tokenHash = hashToken(rawToken);
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 Days
 
-  // Always write to persistent disk/memory store immediately
+  // Write to memory/disk store for fast local lookups
   savePersistentSession(tokenHash, { userId, expiresAt: expiresAt.toISOString() });
 
-  // Asynchronously sync to database with circuit breaker
-  safeDbQuery(
+  // Await saving to Supabase database so session persists across deployments and container restarts
+  await safeDbQuery(
     (p) =>
       p.session.create({
         data: {
@@ -41,9 +41,9 @@ export const createSession = async (userId) => {
         }
       }),
     null,
-    1500
+    10000
   ).catch((err) => {
-    logger.warn('Session DB async sync note:', err.message);
+    logger.warn('Session DB creation note:', err.message);
   });
 
   return {
@@ -56,38 +56,16 @@ export const validateSession = async (rawToken) => {
   if (!rawToken) return null;
   const tokenHash = hashToken(rawToken);
 
-  // 1. Fast Path: check persistent session store
+  // 1. Fast Path: check persistent memory/disk store
   const persistentSess = findPersistentSession(tokenHash);
-  if (persistentSess) {
+  if (persistentSess && new Date(persistentSess.expiresAt) > new Date()) {
     let user = findPersistentUserById(persistentSess.userId);
-    if (!user) {
-      user = await safeDbQuery(
-        (p) =>
-          p.user.findUnique({
-            where: { id: persistentSess.userId },
-            select: {
-              id: true,
-              username: true,
-              email: true,
-              avatar: true,
-              emailVerified: true,
-              role: true,
-              createdAt: true
-            }
-          }),
-        null,
-        1500
-      );
-      if (user) {
-        savePersistentUser(user);
-      }
-    }
     if (user) {
       return user;
     }
   }
 
-  // 2. Database Fallback (with circuit breaker)
+  // 2. Database Lookup (vital for new deployments, container restarts, or another device)
   try {
     const session = await safeDbQuery(
       (p) =>
@@ -108,42 +86,46 @@ export const validateSession = async (rawToken) => {
           }
         }),
       null,
-      1500
+      10000
     );
 
-    if (session) {
-      if (new Date() > new Date(session.expiresAt)) {
-        safeDbQuery((p) => p.session.delete({ where: { id: session.id } })).catch(() => {});
-        deletePersistentSession(tokenHash);
-        return null;
-      }
-      if (session.user) {
-        savePersistentUser(session.user);
-        savePersistentSession(tokenHash, {
-          userId: session.userId,
-          expiresAt: session.expiresAt.toISOString()
-        });
-        return session.user;
-      }
+    if (session && session.user && new Date(session.expiresAt) > new Date()) {
+      savePersistentSession(tokenHash, { userId: session.user.id, expiresAt: session.expiresAt.toISOString ? session.expiresAt.toISOString() : session.expiresAt });
+      savePersistentUser(session.user);
+      return session.user;
     }
-  } catch (err) {
-    logger.warn('Prisma Session validate fallback active:', err.message);
+  } catch (e) {
+    logger.warn('Session DB validation note:', e.message);
   }
 
   return null;
 };
 
 export const revokeSession = async (rawToken) => {
-  if (!rawToken) return;
+  if (!rawToken) return false;
   const tokenHash = hashToken(rawToken);
+
   deletePersistentSession(tokenHash);
 
-  safeDbQuery((p) => p.session.deleteMany({ where: { tokenHash } }), null, 1500).catch(() => {});
+  await safeDbQuery(
+    (p) => p.session.delete({ where: { tokenHash } }),
+    null,
+    10000
+  ).catch(() => {});
+
+  return true;
 };
 
 export const revokeAllUserSessions = async (userId) => {
-  if (!userId) return;
+  if (!userId) return false;
+
   deleteAllPersistentUserSessions(userId);
 
-  safeDbQuery((p) => p.session.deleteMany({ where: { userId } }), null, 1500).catch(() => {});
+  await safeDbQuery(
+    (p) => p.session.deleteMany({ where: { userId } }),
+    null,
+    10000
+  ).catch(() => {});
+
+  return true;
 };

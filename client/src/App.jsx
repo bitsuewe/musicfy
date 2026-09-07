@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { PlayerProvider } from './context/PlayerContext';
-import { WifiOff } from 'lucide-react';
+import { WifiOff, Lock, X } from 'lucide-react';
 
 import Sidebar from './components/Sidebar';
 import SidePlayer from './components/SidePlayer';
@@ -29,12 +29,27 @@ import AddToPlaylistModal from './components/AddToPlaylistModal';
 import { usePlayer } from './context/PlayerContext';
 
 function AppContent() {
+  const { user } = useAuth();
   const { toastMessage } = usePlayer();
   const [showCreatePlaylistModal, setShowCreatePlaylistModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [targetTrackForPlaylist, setTargetTrackForPlaylist] = useState(null);
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [authWarningBanner, setAuthWarningBanner] = useState(null);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.state?.authWarning || location.state?.from?.pathname === '/library') {
+      setAuthWarningBanner('Please sign in or log in to access your Library, saved playlists, and liked songs.');
+    }
+  }, [location]);
+
+  useEffect(() => {
+    if (user) {
+      setAuthWarningBanner(null);
+    }
+  }, [user]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -57,6 +72,37 @@ function AppContent() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#09090B] text-[#FAFAFA] antialiased select-none">
+      
+      {/* ⚠️ Library / Authentication Warning Banner for Non-Logged In Users */}
+      {authWarningBanner && !user && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-[#18181C]/98 border border-[#10B981]/50 text-white px-5 py-3 rounded-2xl shadow-2xl backdrop-blur-2xl flex items-center gap-4 text-xs font-bold animate-fadeIn max-w-xl w-[92vw]">
+          <div className="w-8 h-8 rounded-full bg-[#10B981]/20 flex items-center justify-center text-[#10B981] shrink-0 shadow-sm">
+            <Lock className="w-4 h-4" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-white font-black text-sm">Sign in to access Your Library</p>
+            <p className="text-[#A1A1AA] text-xs font-medium mt-0.5">{authWarningBanner}</p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => {
+                setShowAuthModal(true);
+                setAuthWarningBanner(null);
+              }}
+              className="px-3.5 py-1.5 rounded-lg bg-[#10B981] hover:bg-[#059669] text-black font-extrabold text-xs shadow-md transition-all cursor-pointer active:scale-95"
+            >
+              Sign In
+            </button>
+            <button
+              onClick={() => setAuthWarningBanner(null)}
+              className="p-1 rounded-full text-white/50 hover:text-white transition-colors cursor-pointer"
+              title="Dismiss"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
       
       {/* YouTube Music Exact Top Offline Banner */}
       {!isOnline && (
