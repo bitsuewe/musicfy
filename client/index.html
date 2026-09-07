@@ -36,7 +36,51 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   </head>
   <body class="bg-[#121212] text-[#FAFAFA] antialiased selection:bg-[#1DB954]/30 selection:text-[#1ED760]">
-    <div id="root"></div>
+    <div id="root">
+      <!-- Instant App Shell: Replaced automatically when React mounts -->
+      <div id="musicfy-initial-shell" style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #09090B; color: #FAFAFA; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; padding: 24px; max-width: 400px;">
+          <div style="width: 58px; height: 58px; border-radius: 50%; background: linear-gradient(135deg, #10B981, #059669); display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 25px rgba(16, 185, 129, 0.35); animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 18V5l12-2v13"></path>
+              <circle cx="6" cy="18" r="3"></circle>
+              <circle cx="18" cy="16" r="3"></circle>
+            </svg>
+          </div>
+          <div style="font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Musicfy</div>
+          <div id="musicfy-shell-status" style="font-size: 13px; color: #A1A1AA; font-weight: 500;">
+            Loading your music player...
+          </div>
+          <div id="musicfy-shell-actions" style="display: none; margin-top: 12px; gap: 8px;">
+            <button onclick="window.location.reload()" style="padding: 10px 20px; border-radius: 20px; background: #10B981; border: none; color: #000; font-weight: bold; font-size: 12px; cursor: pointer;">
+              Reload Player
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Offline fallback watchdog: If React takes more than 3.5s while offline, present recovery action -->
+    <script>
+      setTimeout(function() {
+        var shell = document.getElementById('musicfy-initial-shell');
+        if (shell) {
+          var status = document.getElementById('musicfy-shell-status');
+          var actions = document.getElementById('musicfy-shell-actions');
+          if (status) {
+            if (!navigator.onLine) {
+              status.textContent = "You're currently offline. Tap reload to start cached player.";
+            } else {
+              status.textContent = "Connecting to high-fidelity player...";
+            }
+          }
+          if (actions) {
+            actions.style.display = 'flex';
+          }
+        }
+      }, 3500);
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
+

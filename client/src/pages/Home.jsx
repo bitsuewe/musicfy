@@ -10,7 +10,8 @@ import {
   Headphones,
   Compass,
   History,
-  ListMusic
+  ListMusic,
+  HardDrive
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { usePlayer } from '../context/PlayerContext';
@@ -18,6 +19,7 @@ import TrackCard from '../components/TrackCard';
 import PlaylistCard from '../components/PlaylistCard';
 import OfflineNotice from '../components/OfflineNotice';
 import { fetchAllPlaylists } from '../services/playlistStorage';
+import { getAllDownloadedTracks } from '../services/webOfflineStorage';
 import api from '../services/api';
 
 const MOOD_CHIPS = [
@@ -31,11 +33,12 @@ const MOOD_CHIPS = [
 
 export default function Home({ onAddToPlaylist }) {
   const { user, loading: authLoading } = useAuth();
-  const { currentTrack, isPlaying, playTrack, togglePlay, addToQueue, recentlyPlayed } = usePlayer();
+  const { currentTrack, isPlaying, playTrack, togglePlay, addToQueue, recentlyPlayed, playOfflineQueue } = usePlayer();
   const [activeMood, setActiveMood] = useState('all');
   const [heroIndex, setHeroIndex] = useState(0);
   const [recs, setRecs] = useState(null);
   const [playlists, setPlaylists] = useState([]);
+  const [downloadedTracks, setDownloadedTracks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
 
@@ -44,7 +47,10 @@ export default function Home({ onAddToPlaylist }) {
       setIsOnline(true);
       fetchHomeData();
     };
-    const handleOffline = () => setIsOnline(false);
+    const handleOffline = () => {
+      setIsOnline(false);
+      loadOfflineData();
+    };
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
@@ -58,11 +64,18 @@ export default function Home({ onAddToPlaylist }) {
   useEffect(() => {
     fetchHomeData();
     loadPlaylists();
+    loadOfflineData();
 
     const handlePlaylistUpdate = () => loadPlaylists();
     window.addEventListener('spicify_playlists_updated', handlePlaylistUpdate);
     return () => window.removeEventListener('spicify_playlists_updated', handlePlaylistUpdate);
   }, [user]);
+
+  const loadOfflineData = () => {
+    getAllDownloadedTracks()
+      .then(data => setDownloadedTracks(data?.allTracks || []))
+      .catch(() => {});
+  };
 
   const loadPlaylists = () => {
     fetchAllPlaylists(user)
@@ -236,6 +249,58 @@ export default function Home({ onAddToPlaylist }) {
           title="You're offline"
           description="Showing your downloaded music available without an internet connection."
         />
+      )}
+
+      {/* 🚀 Offline Ready Section: Downloaded Songs */}
+      {!isOnline && (
+        <section className="space-y-4 bg-[#18181C]/90 border border-[#10B981]/40 p-5 sm:p-6 rounded-2xl shadow-2xl backdrop-blur-xl animate-fadeIn">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-[#10B981]/20 flex items-center justify-center text-[#10B981] shadow-md">
+                <HardDrive className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
+                  <span>Downloaded Music</span>
+                  <span className="text-[11px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-[#10B981]/20 text-[#10B981] border border-[#10B981]/30">
+                    Offline Ready
+                  </span>
+                </h2>
+                <p className="text-xs text-[#B3B3B3] font-medium mt-0.5">
+                  {downloadedTracks.length > 0
+                    ? `${downloadedTracks.length} song${downloadedTracks.length > 1 ? 's' : ''} stored locally on this device`
+                    : "No songs saved for offline playback yet."}
+                </p>
+              </div>
+            </div>
+
+            {downloadedTracks.length > 0 && (
+              <button
+                onClick={() => playOfflineQueue(downloadedTracks, 0)}
+                className="px-5 py-2.5 rounded-full bg-[#10B981] hover:bg-[#059669] text-black font-extrabold text-xs flex items-center gap-2 shadow-lg hover:scale-105 active:scale-95 transition-all self-start sm:self-auto cursor-pointer"
+              >
+                <Play className="w-4 h-4 fill-black text-black ml-0.5" />
+                <span>Play All Offline</span>
+              </button>
+            )}
+          </div>
+
+          {downloadedTracks.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5 sm:gap-6 pt-2">
+              {downloadedTracks.map((track) => (
+                <TrackCard
+                  key={`dl-home-${track.id}`}
+                  track={track}
+                  onAddToPlaylist={onAddToPlaylist}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="p-6 text-center text-[#A1A1AA] text-xs bg-white/5 rounded-xl border border-white/5">
+              <p>When you're online, tap the download button on any song to save it for offline listening.</p>
+            </div>
+          )}
+        </section>
       )}
 
       {/* 🌟 1. Spotify Header & Mood Filter Chips */}

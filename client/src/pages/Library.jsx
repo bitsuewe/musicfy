@@ -104,7 +104,8 @@ export default function Library({ onRequestCreatePlaylist, onAddToPlaylist }) {
 
       if (likes.length === 0) {
         try {
-          const rawLocal = localStorage.getItem('spicify_user_liked_tracks');
+          const userKey = user?.id ? `musicfy_likes_${user.id}` : 'musicfy_guest_likes';
+          const rawLocal = localStorage.getItem(userKey) || localStorage.getItem('spicify_user_liked_tracks');
           if (rawLocal) likes = JSON.parse(rawLocal);
         } catch (e) {}
       }
@@ -118,7 +119,8 @@ export default function Library({ onRequestCreatePlaylist, onAddToPlaylist }) {
 
       if (histTracks.length === 0) {
         try {
-          const rawLocal = localStorage.getItem('spicify_user_recent_tracks');
+          const userKey = user?.id ? `musicfy_recents_${user.id}` : 'musicfy_guest_recents';
+          const rawLocal = localStorage.getItem(userKey) || localStorage.getItem('spicify_user_recent_tracks');
           if (rawLocal) histTracks = JSON.parse(rawLocal);
         } catch (e) {}
       }

@@ -313,10 +313,10 @@ export const PlayerProvider = ({ children }) => {
   const saveRecentTrack = (track) => {
     if (!track || !track.id) return;
     setRecentlyPlayed(prev => {
-      const filtered = prev.filter(t => t.id !== track.id);
+      const filtered = (prev || []).filter(t => t && t.id !== track.id);
       const updated = [track, ...filtered].slice(0, 20);
       try {
-        localStorage.setItem(RECENTS_KEY, JSON.stringify(updated));
+        localStorage.setItem(getRecentsKey(userRef.current?.id), JSON.stringify(updated));
       } catch (e) {}
       return updated;
     });
