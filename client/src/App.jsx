@@ -134,10 +134,10 @@ function AppContent() {
       {/* High-Fidelity Audio Engine, Background Keeper & Picture-in-Picture (PiP) Carrier */}
       <div 
         aria-hidden="true" 
-        className="fixed pointer-events-none opacity-[0.001] overflow-hidden -z-50"
-        style={{ transform: 'translateZ(0)', position: 'fixed', bottom: '-9999px', right: '-9999px', width: '320px', height: '180px' }}
+        className="fixed pointer-events-none overflow-hidden"
+        style={{ position: 'fixed', bottom: 0, left: 0, width: '200px', height: '120px', opacity: 0.001, pointerEvents: 'none', zIndex: -100 }}
       >
-        <div id="musicfy-yt-player-iframe" style={{ width: '320px', height: '180px' }} />
+        <div id="musicfy-yt-player-iframe" style={{ width: '200px', height: '120px' }} />
         {/* High-Fidelity Native HTML5 Audio Engine (Both online stream & offline cached tracks) */}
         <audio id="musicfy-offline-audio" playsInline preload="auto" crossOrigin="anonymous" />
         {/* Mobile Background Audio Anchor */}

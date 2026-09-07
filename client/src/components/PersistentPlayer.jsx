@@ -38,6 +38,7 @@ export default function PersistentPlayer() {
     playNext,
     playPrev,
     seekTo,
+    setIsScrubbing,
     setVolumeLevel,
     toggleMute,
     setShuffle,
@@ -58,6 +59,7 @@ export default function PersistentPlayer() {
   const [showQueue, setShowQueue] = useState(false);
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
+  const [scrubTime, setScrubTime] = useState(null);
 
   // If there is no track or the Side Player is active, do not show the bottom player bar
   if (!currentTrack || showSidePlayer) return null;
@@ -69,8 +71,25 @@ export default function PersistentPlayer() {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const activeTime = scrubTime !== null ? scrubTime : currentTime;
+  const progressPercent = duration > 0 ? (activeTime / duration) * 100 : 0;
   const liked = isLiked(currentTrack.id);
+
+  const handleScrubStart = () => {
+    if (setIsScrubbing) setIsScrubbing(true);
+  };
+
+  const handleScrubChange = (e) => {
+    setScrubTime(Number(e.target.value));
+  };
+
+  const handleScrubEnd = () => {
+    if (scrubTime !== null) {
+      seekTo(scrubTime);
+      setScrubTime(null);
+    }
+    if (setIsScrubbing) setIsScrubbing(false);
+  };
 
   return (
     <>
@@ -195,19 +214,29 @@ export default function PersistentPlayer() {
                 {currentTrack.artistName}
               </p>
 
-              {/* Apple Music Thin White Scrubber Bar */}
-              <div
-                className="relative w-full h-[2px] sm:h-[2.5px] bg-white/20 hover:h-[3.5px] rounded-full cursor-pointer mt-1 group/bar transition-all"
-                onClick={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-                  seekTo(pct * duration);
-                }}
-              >
-                <div
-                  className="absolute left-0 top-0 bottom-0 bg-white rounded-full shadow-sm"
-                  style={{ width: `${progressPercent}%` }}
-                />
+              {/* Apple Music Smooth Interactive Scrubber Bar with Live Timers */}
+              <div className="flex items-center gap-1.5 mt-0.5 w-full select-none">
+                <span className="text-[9px] text-[#A1A1AA] tabular-nums font-mono shrink-0 min-w-[20px]">
+                  {formatTime(activeTime)}
+                </span>
+                <div className="relative flex-1 flex items-center group/scrubber py-0.5">
+                  <input
+                    type="range"
+                    min="0"
+                    max={Math.max(1, duration || 1)}
+                    step="0.5"
+                    value={activeTime}
+                    onMouseDown={handleScrubStart}
+                    onTouchStart={handleScrubStart}
+                    onChange={handleScrubChange}
+                    onMouseUp={handleScrubEnd}
+                    onTouchEnd={handleScrubEnd}
+                    className="w-full h-[3px] group-hover/scrubber:h-[4.5px] rounded-full appearance-none cursor-pointer bg-white/25 accent-[#10B981] transition-all"
+                  />
+                </div>
+                <span className="text-[9px] text-[#71717A] tabular-nums font-mono shrink-0 min-w-[20px] text-right">
+                  {formatTime(duration)}
+                </span>
               </div>
             </div>
 
@@ -442,22 +471,24 @@ export default function PersistentPlayer() {
           </div>
 
           <div className="relative z-10 max-w-2xl mx-auto w-full pb-4 space-y-4 sm:space-y-6">
-            <div className="w-full flex items-center gap-2 sm:gap-3 text-xs font-bold text-white/60">
-              <span className="w-10 text-right tabular-nums">{formatTime(currentTime)}</span>
-              <div
-                className="relative flex-1 h-2 bg-white/15 hover:h-2.5 rounded-full cursor-pointer transition-all"
-                onClick={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-                  seekTo(pct * duration);
-                }}
-              >
-                <div
-                  className="absolute top-0 left-0 bottom-0 bg-white rounded-full shadow-md"
-                  style={{ width: `${progressPercent}%` }}
+            <div className="w-full flex items-center gap-2 sm:gap-3 text-xs font-bold text-white/70 select-none">
+              <span className="w-12 text-right tabular-nums font-mono">{formatTime(activeTime)}</span>
+              <div className="relative flex-1 flex items-center group/fullscreen-scrubber py-1">
+                <input
+                  type="range"
+                  min="0"
+                  max={Math.max(1, duration || 1)}
+                  step="0.5"
+                  value={activeTime}
+                  onMouseDown={handleScrubStart}
+                  onTouchStart={handleScrubStart}
+                  onChange={handleScrubChange}
+                  onMouseUp={handleScrubEnd}
+                  onTouchEnd={handleScrubEnd}
+                  className="w-full h-2 group-hover/fullscreen-scrubber:h-3 rounded-full appearance-none cursor-pointer bg-white/20 accent-[#10B981] transition-all shadow-inner"
                 />
               </div>
-              <span className="w-10 tabular-nums">-{formatTime(Math.max(0, duration - currentTime))}</span>
+              <span className="w-12 tabular-nums font-mono">-{formatTime(Math.max(0, duration - activeTime))}</span>
             </div>
 
             <div className="flex items-center justify-center gap-8 sm:gap-10">

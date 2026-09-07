@@ -1,7 +1,6 @@
 import bcrypt from 'bcryptjs';
-import { prisma, safeDbQuery } from '../config/db.js';
-import { createSession, revokeSession, revokeAllUserSessions, hashToken, memorySessions, memoryUsers } from '../services/sessionService.js';
-import { savePersistentUser, findPersistentUser, findPersistentUserByEmail, findPersistentUserByUsername } from '../services/persistentUserStore.js';
+import { prisma } from '../config/db.js';
+import { createSession, revokeSession, revokeAllUserSessions, hashToken } from '../services/sessionService.js';
 import { createEmailVerificationToken, verifyEmailToken, createPasswordResetToken, sendMockEmail } from '../services/emailService.js';
 import { logger } from '../utils/logger.js';
 
@@ -65,49 +64,26 @@ export const register = async (req, res) => {
       });
     }
 
-    // 1. Check if Email already exists (case-insensitive)
-    let existingEmailUser = findPersistentUserByEmail(normalizedEmail) || findPersistentUser(normalizedEmail);
-    if (!existingEmailUser) {
-      existingEmailUser = await safeDbQuery(
-        (p) =>
-          p.user.findFirst({
-            where: { email: { equals: normalizedEmail, mode: 'insensitive' } }
-          }),
-        null,
-        10000
-      );
-      if (existingEmailUser) {
-        savePersistentUser(existingEmailUser);
+    // Check directly in Supabase if Email or Username already exists
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: { equals: normalizedEmail, mode: 'insensitive' } },
+          { username: { equals: trimmedUsername, mode: 'insensitive' } }
+        ]
       }
-    }
+    });
 
-    if (existingEmailUser) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: 'EMAIL_ALREADY_EXISTS',
-          message: 'This email address is already registered. Please sign in or use a different email.'
-        }
-      });
-    }
-
-    // 2. Check if Username already exists (case-insensitive)
-    let existingUsernameUser = findPersistentUserByUsername(trimmedUsername);
-    if (!existingUsernameUser) {
-      existingUsernameUser = await safeDbQuery(
-        (p) =>
-          p.user.findFirst({
-            where: { username: { equals: trimmedUsername, mode: 'insensitive' } }
-          }),
-        null,
-        10000
-      );
-      if (existingUsernameUser) {
-        savePersistentUser(existingUsernameUser);
+    if (existingUser) {
+      if (existingUser.email.toLowerCase() === normalizedEmail) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'EMAIL_ALREADY_EXISTS',
+            message: 'This email address is already registered. Please sign in or use a different email.'
+          }
+        });
       }
-    }
-
-    if (existingUsernameUser) {
       return res.status(400).json({
         success: false,
         error: {
@@ -117,65 +93,47 @@ export const register = async (req, res) => {
       });
     }
 
-    // 🔒 BCRYPT PASSWORD HASHING
+    // Hash password with Bcrypt
     const passwordHash = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
+    const avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(trimmedUsername)}`;
 
-    let user = {
-      id: `usr_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-      username: trimmedUsername,
-      email: normalizedEmail,
-      passwordHash,
-      avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(trimmedUsername)}`,
-      emailVerified: false,
-      role: 'USER',
-      createdAt: new Date().toISOString()
-    };
-
-    // Save directly to Supabase first so user is permanent across deployments
-    const dbUser = await safeDbQuery(
-      (p) =>
-        p.user.create({
-          data: {
-            username: trimmedUsername,
-            email: normalizedEmail,
-            passwordHash,
-            avatar: user.avatar,
-            emailVerified: false
-          }
-        }),
-      null,
-      10000
-    ).catch((err) => {
-      logger.warn('Prisma user create note:', err.message);
-      return null;
+    // Create user directly in Supabase
+    const dbUser = await prisma.user.create({
+      data: {
+        username: trimmedUsername,
+        email: normalizedEmail,
+        passwordHash,
+        avatar,
+        emailVerified: false
+      }
     });
 
-    if (dbUser) {
-      user = {
-        ...user,
-        id: dbUser.id,
-        createdAt: dbUser.createdAt ? dbUser.createdAt.toISOString() : user.createdAt
-      };
-    }
-
-    // Save to persistent local store as secondary cache
-    savePersistentUser(user);
-
-    // Create session & HTTP-only cookie (persisted to Supabase)
-    const { rawToken } = await createSession(user.id);
+    // Create session in Supabase
+    const { rawToken } = await createSession(dbUser.id);
     res.cookie(COOKIE_NAME, rawToken, COOKIE_OPTIONS);
 
     // Create verification token & send email
-    const verificationToken = await createEmailVerificationToken(user.id);
-    sendMockEmail(normalizedEmail, 'Verify your Spicify account', `Click to verify: ${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify-email?token=${verificationToken}`);
+    try {
+      const verificationToken = await createEmailVerificationToken(dbUser.id);
+      sendMockEmail(normalizedEmail, 'Verify your Spicify account', `Click to verify: ${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify-email?token=${verificationToken}`);
+    } catch (e) {
+      logger.warn('Email verification note:', e.message);
+    }
 
     return res.status(201).json({
       success: true,
-      user: formatSafeUser(user),
+      user: formatSafeUser(dbUser),
       token: rawToken
     });
   } catch (err) {
     logger.error('Register controller error:', err);
+    if (err.code === 'P2002') {
+      const field = err.meta?.target?.[0] || 'account';
+      return res.status(400).json({
+        success: false,
+        error: { code: 'DUPLICATE_FIELD', message: `An account with this ${field} already exists.` }
+      });
+    }
     return res.status(500).json({
       success: false,
       error: { code: 'SERVER_ERROR', message: 'Failed to create account. Please try again.' }
@@ -197,85 +155,33 @@ export const login = async (req, res) => {
 
     const lowerInput = input.toLowerCase();
 
-    // 1. Primary: Query Supabase directly (case-insensitive for both email and username)
-    let user = await safeDbQuery(
-      (p) =>
-        p.user.findFirst({
-          where: {
-            OR: [
-              { email: { equals: lowerInput, mode: 'insensitive' } },
-              { username: { equals: input, mode: 'insensitive' } },
-              { username: { equals: lowerInput, mode: 'insensitive' } }
-            ]
-          }
-        }),
-      null,
-      10000
-    );
-
-    if (user) {
-      savePersistentUser(user);
-    } else {
-      // 2. Fallback to local persistent cache
-      user = findPersistentUserByEmail(lowerInput) ||
-             findPersistentUserByUsername(input) ||
-             findPersistentUserByUsername(lowerInput) ||
-             findPersistentUser(lowerInput) ||
-             findPersistentUser(input);
-    }
-
+    // Query Supabase directly (case-insensitive for both email and username)
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: { equals: lowerInput, mode: 'insensitive' } },
+          { username: { equals: input, mode: 'insensitive' } },
+          { username: { equals: lowerInput, mode: 'insensitive' } }
+        ]
+      }
+    });
 
     if (!user) {
-      await bcrypt.compare(password, '$2a$12$eImiTXuWVxfM37uY4JANjO56E2452586796982928372625242524');
+      // Dummy compare to prevent timing attacks
+      await bcrypt.compare(password, '$2b$12$eImiTXuWVxfM37uY4JANjO56E2452586796982928372625242524');
       return res.status(401).json({
         success: false,
         error: { code: 'INVALID_CREDENTIALS', message: 'Invalid email or password.' }
       });
     }
 
-    // 🔒 Bcrypt comparison with whitespace tolerance and fallback
-    const hash = user.passwordHash || user.hash;
+    // Bcrypt comparison
     let isMatch = false;
+    const hash = user.passwordHash;
     if (hash && typeof hash === 'string') {
-      try {
-        isMatch = await bcrypt.compare(password, hash);
-        if (!isMatch && typeof password === 'string') {
-          isMatch = await bcrypt.compare(password.trim(), hash);
-        }
-      } catch (err) {
-        logger.warn('Bcrypt compare error:', err.message);
-      }
-    }
-    if (!isMatch && user.password && typeof user.password === 'string') {
-      isMatch = user.password === password || user.password === password.trim();
-    }
-
-    if (!isMatch) {
-      // Re-check PostgreSQL directly in case password was changed or user was updated in DB
-      const dbUser = await safeDbQuery(
-        (p) =>
-          p.user.findFirst({
-            where: {
-              OR: [
-                { email: { equals: lowerInput, mode: 'insensitive' } },
-                { username: { equals: input, mode: 'insensitive' } }
-              ]
-            }
-          }),
-        null,
-        1500
-      );
-      if (dbUser && dbUser.passwordHash) {
-        try {
-          isMatch = await bcrypt.compare(password, dbUser.passwordHash);
-          if (!isMatch && typeof password === 'string') {
-            isMatch = await bcrypt.compare(password.trim(), dbUser.passwordHash);
-          }
-          if (isMatch) {
-            user = dbUser;
-            savePersistentUser(dbUser);
-          }
-        } catch (e) {}
+      isMatch = await bcrypt.compare(password, hash);
+      if (!isMatch && typeof password === 'string') {
+        isMatch = await bcrypt.compare(password.trim(), hash);
       }
     }
 
@@ -286,6 +192,7 @@ export const login = async (req, res) => {
       });
     }
 
+    // Create session in Supabase
     const { rawToken } = await createSession(user.id);
     res.cookie(COOKIE_NAME, rawToken, COOKIE_OPTIONS);
 
@@ -375,7 +282,7 @@ export const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
     if (email) {
-      const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } }).catch(() => memoryUsers.get(email.toLowerCase()));
+      const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } }).catch(() => null);
       if (user) {
         const resetToken = await createPasswordResetToken(user.id);
         sendMockEmail(user.email, 'Reset your Spicify password', `Reset Token: ${resetToken}`);
@@ -412,12 +319,11 @@ export const resetPassword = async (req, res) => {
       });
     }
 
-    // 🔒 BCRYPT 12 SALT ROUNDS FOR PASSWORD RESET
     const passwordHash = await bcrypt.hash(newPassword, BCRYPT_SALT_ROUNDS);
     await prisma.user.update({
       where: { id: resetRecord.userId },
       data: { passwordHash }
-    }).catch(() => {});
+    });
 
     await prisma.passwordResetToken.delete({ where: { id: resetRecord.id } }).catch(() => {});
     await revokeAllUserSessions(resetRecord.userId);
@@ -440,12 +346,15 @@ export const changePassword = async (req, res) => {
       });
     }
 
-    let dbUser = await prisma.user.findUnique({ where: { id: userId } }).catch(() => null);
-    if (!dbUser && req.user.email) {
-      dbUser = memoryUsers.get(req.user.email);
+    const dbUser = await prisma.user.findUnique({ where: { id: userId } }).catch(() => null);
+    if (!dbUser) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'USER_NOT_FOUND', message: 'User not found.' }
+      });
     }
 
-    const isMatch = dbUser ? await bcrypt.compare(currentPassword, dbUser.passwordHash) : false;
+    const isMatch = await bcrypt.compare(currentPassword, dbUser.passwordHash);
 
     if (!isMatch) {
       return res.status(401).json({
@@ -454,13 +363,10 @@ export const changePassword = async (req, res) => {
       });
     }
 
-    // 🔒 BCRYPT 12 SALT ROUNDS FOR CHANGE PASSWORD
     const passwordHash = await bcrypt.hash(newPassword, BCRYPT_SALT_ROUNDS);
     await prisma.user.update({
       where: { id: userId },
       data: { passwordHash }
-    }).catch(() => {
-      if (dbUser) dbUser.passwordHash = passwordHash;
     });
 
     await revokeAllUserSessions(userId);

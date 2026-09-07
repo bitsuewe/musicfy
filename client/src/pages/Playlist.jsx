@@ -40,7 +40,7 @@ export default function Playlist({ onAddToPlaylist }) {
         // Fallback to user-scoped local storage if DB is empty
         if (tracks.length === 0 && user?.id) {
           try {
-            const rawLocal = localStorage.getItem(`musicfy_likes_${user.id}`) || localStorage.getItem('spicify_user_liked_tracks');
+            const rawLocal = localStorage.getItem(`musicfy_likes_${user.id}`);
             if (rawLocal) tracks = JSON.parse(rawLocal);
           } catch (e) {}
         }

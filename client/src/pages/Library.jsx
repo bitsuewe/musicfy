@@ -102,10 +102,10 @@ export default function Library({ onRequestCreatePlaylist, onAddToPlaylist }) {
         likes = (likeRes.data.likes || []).map(l => l.track).filter(Boolean);
       } catch (e) {}
 
-      if (likes.length === 0) {
+      if (likes.length === 0 && user?.id) {
         try {
-          const userKey = user?.id ? `musicfy_likes_${user.id}` : 'musicfy_guest_likes';
-          const rawLocal = localStorage.getItem(userKey) || localStorage.getItem('spicify_user_liked_tracks');
+          const userKey = `musicfy_likes_${user.id}`;
+          const rawLocal = localStorage.getItem(userKey);
           if (rawLocal) likes = JSON.parse(rawLocal);
         } catch (e) {}
       }
@@ -117,10 +117,10 @@ export default function Library({ onRequestCreatePlaylist, onAddToPlaylist }) {
         histTracks = (histRes.data.history || []).map(f => f.track).filter(Boolean);
       } catch (e) {}
 
-      if (histTracks.length === 0) {
+      if (histTracks.length === 0 && user?.id) {
         try {
-          const userKey = user?.id ? `musicfy_recents_${user.id}` : 'musicfy_guest_recents';
-          const rawLocal = localStorage.getItem(userKey) || localStorage.getItem('spicify_user_recent_tracks');
+          const userKey = `musicfy_recents_${user.id}`;
+          const rawLocal = localStorage.getItem(userKey);
           if (rawLocal) histTracks = JSON.parse(rawLocal);
         } catch (e) {}
       }

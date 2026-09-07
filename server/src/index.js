@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
@@ -5,14 +6,11 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
-import dotenv from 'dotenv';
 import apiRoutes from './routes/index.js';
 import { prisma } from './config/db.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { runCleanupJob } from './jobs/cleanupJob.js';
 import { logger } from './utils/logger.js';
-
-dotenv.config();
 
 const app = express();
 const server = http.createServer(app);

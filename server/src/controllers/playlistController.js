@@ -1,52 +1,30 @@
-import { prisma, safeDbQuery } from '../config/db.js';
-import {
-  getPersistentUserPlaylists,
-  createPersistentPlaylist,
-  getPersistentPlaylistById,
-  addTrackToPersistentPlaylist,
-  removeTrackFromPersistentPlaylist
-} from '../services/persistentUserDataStore.js';
+import { prisma } from '../config/db.js';
 
 export const getPlaylists = async (req, res) => {
   try {
     const userId = req.user?.id;
-    const persistentPlaylists = getPersistentUserPlaylists(userId);
 
-    const dbPlaylists = await safeDbQuery(
-      (p) =>
-        p.playlist.findMany({
-          where: userId
-            ? {
-                OR: [
-                  { ownerId: userId },
-                  { collaborators: { some: { userId } } },
-                  { isPublic: true }
-                ]
-              }
-            : { isPublic: true },
-          include: {
-            owner: { select: { id: true, username: true, avatar: true } },
-            tracks: {
-              include: { track: true },
-              orderBy: { position: 'asc' }
-            }
-          },
-          orderBy: { updatedAt: 'desc' }
-        }),
-      null,
-      2000
-    );
+    const playlists = await prisma.playlist.findMany({
+      where: userId
+        ? {
+            OR: [
+              { ownerId: userId },
+              { collaborators: { some: { userId } } },
+              { isPublic: true }
+            ]
+          }
+        : { isPublic: true },
+      include: {
+        owner: { select: { id: true, username: true, avatar: true } },
+        tracks: {
+          include: { track: true },
+          orderBy: { position: 'asc' }
+        }
+      },
+      orderBy: { updatedAt: 'desc' }
+    });
 
-    if (Array.isArray(dbPlaylists) && dbPlaylists.length > 0) {
-      const map = new Map();
-      dbPlaylists.forEach((p) => map.set(p.id, p));
-      persistentPlaylists.forEach((p) => {
-        if (!map.has(p.id)) map.set(p.id, p);
-      });
-      return res.json({ playlists: Array.from(map.values()) });
-    }
-
-    return res.json({ playlists: persistentPlaylists });
+    return res.json({ playlists: playlists || [] });
   } catch (err) {
     console.error('Get playlists error:', err);
     return res.status(500).json({ error: 'Failed to fetch playlists' });
@@ -62,30 +40,20 @@ export const createPlaylist = async (req, res) => {
       return res.status(400).json({ error: 'Playlist title is required' });
     }
 
-    // 1. Create in persistent store immediately
-    const playlist = createPersistentPlaylist(
-      userId,
-      { title, description, isPublic, isCollab, coverUrl },
-      req.user
-    );
-
-    // 2. Sync to Prisma in background
-    safeDbQuery(
-      (p) =>
-        p.playlist.create({
-          data: {
-            id: playlist.id,
-            title: playlist.title,
-            description: playlist.description,
-            coverUrl: playlist.coverUrl,
-            isPublic: playlist.isPublic,
-            isCollab: playlist.isCollab,
-            ownerId: userId
-          }
-        }),
-      null,
-      2000
-    ).catch(() => {});
+    const playlist = await prisma.playlist.create({
+      data: {
+        title: title.trim(),
+        description: description || '',
+        coverUrl: coverUrl || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?auto=format&fit=crop&w=600&q=80',
+        isPublic: isPublic !== false,
+        isCollab: isCollab === true,
+        ownerId: userId
+      },
+      include: {
+        owner: { select: { id: true, username: true, avatar: true } },
+        tracks: { include: { track: true } }
+      }
+    });
 
     return res.status(201).json({ playlist });
   } catch (err) {
@@ -97,25 +65,17 @@ export const createPlaylist = async (req, res) => {
 export const getPlaylistById = async (req, res) => {
   try {
     const { id } = req.params;
-    let playlist = getPersistentPlaylistById(id);
 
-    if (!playlist) {
-      playlist = await safeDbQuery(
-        (p) =>
-          p.playlist.findUnique({
-            where: { id },
-            include: {
-              owner: { select: { id: true, username: true, avatar: true } },
-              tracks: {
-                include: { track: true },
-                orderBy: { position: 'asc' }
-              }
-            }
-          }),
-        null,
-        2000
-      );
-    }
+    const playlist = await prisma.playlist.findUnique({
+      where: { id },
+      include: {
+        owner: { select: { id: true, username: true, avatar: true } },
+        tracks: {
+          include: { track: true },
+          orderBy: { position: 'asc' }
+        }
+      }
+    });
 
     if (!playlist) {
       return res.status(404).json({ error: 'Playlist not found' });
@@ -133,37 +93,30 @@ export const updatePlaylist = async (req, res) => {
     const { id } = req.params;
     const { title, description, coverUrl, isPublic } = req.body;
 
-    const playlist = getPersistentPlaylistById(id);
-    if (!playlist) {
+    const existing = await prisma.playlist.findUnique({ where: { id } });
+    if (!existing) {
       return res.status(404).json({ error: 'Playlist not found' });
     }
 
-    if (playlist.ownerId !== req.user.id) {
+    if (existing.ownerId !== req.user.id) {
       return res.status(403).json({ error: 'Unauthorized to update this playlist' });
     }
 
-    if (title) playlist.title = title.trim();
-    if (description !== undefined) playlist.description = description;
-    if (coverUrl) playlist.coverUrl = coverUrl;
-    if (isPublic !== undefined) playlist.isPublic = isPublic;
-    playlist.updatedAt = new Date().toISOString();
+    const updated = await prisma.playlist.update({
+      where: { id },
+      data: {
+        title: title ? title.trim() : undefined,
+        description: description !== undefined ? description : undefined,
+        coverUrl: coverUrl || undefined,
+        isPublic: isPublic !== undefined ? isPublic : undefined
+      },
+      include: {
+        owner: { select: { id: true, username: true, avatar: true } },
+        tracks: { include: { track: true }, orderBy: { position: 'asc' } }
+      }
+    });
 
-    safeDbQuery(
-      (p) =>
-        p.playlist.update({
-          where: { id },
-          data: {
-            title: playlist.title,
-            description: playlist.description,
-            coverUrl: playlist.coverUrl,
-            isPublic: playlist.isPublic
-          }
-        }),
-      null,
-      2000
-    ).catch(() => {});
-
-    return res.json({ playlist });
+    return res.json({ playlist: updated });
   } catch (err) {
     console.error('Update playlist error:', err);
     return res.status(500).json({ error: 'Failed to update playlist' });
@@ -173,13 +126,17 @@ export const updatePlaylist = async (req, res) => {
 export const deletePlaylist = async (req, res) => {
   try {
     const { id } = req.params;
-    const playlist = getPersistentPlaylistById(id);
+    const existing = await prisma.playlist.findUnique({ where: { id } });
 
-    if (playlist && playlist.ownerId !== req.user.id) {
+    if (!existing) {
+      return res.status(404).json({ error: 'Playlist not found' });
+    }
+
+    if (existing.ownerId !== req.user.id) {
       return res.status(403).json({ error: 'Unauthorized to delete this playlist' });
     }
 
-    safeDbQuery((p) => p.playlist.delete({ where: { id } }), null, 2000).catch(() => {});
+    await prisma.playlist.delete({ where: { id } });
 
     return res.json({ success: true, message: 'Playlist deleted' });
   } catch (err) {
@@ -197,33 +154,46 @@ export const addTrackToPlaylist = async (req, res) => {
       return res.status(400).json({ error: 'Track ID is required' });
     }
 
-    const playlist = addTrackToPersistentPlaylist(id, track || { id: trackId }, req.user.id);
+    // Ensure track exists in Supabase Track table
+    await prisma.track.upsert({
+      where: { id: trackId },
+      update: {
+        title: track?.title || 'Unknown Track',
+        artistName: track?.artistName || 'Unknown Artist',
+        thumbnail: track?.thumbnail || `https://i.ytimg.com/vi/${trackId}/hqdefault.jpg`,
+        durationSec: track?.durationSec || 200,
+        category: track?.category || 'Music'
+      },
+      create: {
+        id: trackId,
+        title: track?.title || 'Unknown Track',
+        artistName: track?.artistName || 'Unknown Artist',
+        thumbnail: track?.thumbnail || `https://i.ytimg.com/vi/${trackId}/hqdefault.jpg`,
+        durationSec: track?.durationSec || 200,
+        category: track?.category || 'Music'
+      }
+    });
 
-    // Sync to DB in background
-    safeDbQuery(async (p) => {
-      await p.track.upsert({
-        where: { id: trackId },
-        update: {},
-        create: {
-          id: trackId,
-          title: track?.title || 'Unknown Track',
-          artistName: track?.artistName || 'Unknown Artist',
-          thumbnail: track?.thumbnail || `https://i.ytimg.com/vi/${trackId}/hqdefault.jpg`,
-          durationSec: track?.durationSec || 200,
-          category: track?.category || 'Music'
-        }
-      });
-      await p.playlistTrack.create({
-        data: {
-          playlistId: id,
-          trackId,
-          position: (playlist?.tracks?.length || 1) - 1,
-          addedById: req.user.id
-        }
-      });
-    }, null, 2000).catch(() => {});
+    const trackCount = await prisma.playlistTrack.count({ where: { playlistId: id } });
 
-    return res.json({ success: true, playlist });
+    await prisma.playlistTrack.create({
+      data: {
+        playlistId: id,
+        trackId,
+        position: trackCount,
+        addedById: req.user.id
+      }
+    });
+
+    const updatedPlaylist = await prisma.playlist.findUnique({
+      where: { id },
+      include: {
+        owner: { select: { id: true, username: true, avatar: true } },
+        tracks: { include: { track: true }, orderBy: { position: 'asc' } }
+      }
+    });
+
+    return res.json({ success: true, playlist: updatedPlaylist });
   } catch (err) {
     console.error('Add track error:', err);
     return res.status(500).json({ error: 'Failed to add track to playlist' });
@@ -233,18 +203,20 @@ export const addTrackToPlaylist = async (req, res) => {
 export const removeTrackFromPlaylist = async (req, res) => {
   try {
     const { id, trackId } = req.params;
-    const playlist = removeTrackFromPersistentPlaylist(id, trackId);
 
-    safeDbQuery(
-      (p) =>
-        p.playlistTrack.deleteMany({
-          where: { playlistId: id, trackId }
-        }),
-      null,
-      2000
-    ).catch(() => {});
+    await prisma.playlistTrack.deleteMany({
+      where: { playlistId: id, trackId }
+    });
 
-    return res.json({ success: true, playlist });
+    const updatedPlaylist = await prisma.playlist.findUnique({
+      where: { id },
+      include: {
+        owner: { select: { id: true, username: true, avatar: true } },
+        tracks: { include: { track: true }, orderBy: { position: 'asc' } }
+      }
+    });
+
+    return res.json({ success: true, playlist: updatedPlaylist });
   } catch (err) {
     console.error('Remove track error:', err);
     return res.status(500).json({ error: 'Failed to remove track from playlist' });

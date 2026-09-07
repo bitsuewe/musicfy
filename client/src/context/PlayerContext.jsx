@@ -92,8 +92,10 @@ export const PlayerProvider = ({ children }) => {
 
   const playerRef = useRef(null);
   const progressIntervalRef = useRef(null);
-  const initialSeekDoneRef = useRef(false);
   const userInitiatedPauseRef = useRef(false);
+  const activeEngineRef = useRef('youtube'); // 'audio' | 'youtube'
+  const isScrubbingRef = useRef(false);
+  const lastSaveTimeRef = useRef(0);
 
   // Synchronous references to avoid stale closure in MediaSession and background events
   const currentTrackRef = useRef(currentTrack);
@@ -500,6 +502,13 @@ export const PlayerProvider = ({ children }) => {
   // User synchronization: Re-hydrate user-scoped likes and playback history when account changes
   useEffect(() => {
     const activeUserId = user?.id || null;
+
+    // Clear any obsolete shared legacy keys
+    try {
+      localStorage.removeItem('spicify_user_liked_tracks');
+      localStorage.removeItem('spicify_user_recent_tracks');
+    } catch (e) {}
+
     const localLikes = getSavedLikedTracks(activeUserId);
     const localRecents = getSavedRecentTracks(activeUserId);
 
@@ -518,6 +527,12 @@ export const PlayerProvider = ({ children }) => {
             setLikedTrackIds(ids);
             try {
               localStorage.setItem(getLikesKey(activeUserId), JSON.stringify(dbLikes));
+            } catch (e) {}
+          } else {
+            // New user or 0 likes: guarantee clean empty liked state
+            setLikedTrackIds(new Set());
+            try {
+              localStorage.setItem(getLikesKey(activeUserId), JSON.stringify([]));
             } catch (e) {}
           }
         }
@@ -666,21 +681,37 @@ export const PlayerProvider = ({ children }) => {
   const startProgressTimer = () => {
     stopProgressTimer();
     progressIntervalRef.current = setInterval(() => {
-      if (playerRef.current && playerRef.current.getCurrentTime) {
-        try {
-          const time = Math.round(playerRef.current.getCurrentTime());
-          setCurrentTime(time);
-          saveState({ currentTime: time });
-          updateMediaSessionPosition(time, durationRef.current);
+      if (isScrubbingRef.current) return;
 
-          // 🔒 Spotify guest preview restriction: non-logged-in users can only play 30 seconds
-          if (!userRef.current && time >= 30) {
-            pauseTrack();
-            showToast('Preview ended (30s) — Sign in to listen to full tracks and download offline.');
-          }
+      let time = 0;
+      const audioEl = typeof document !== 'undefined' ? document.getElementById('musicfy-offline-audio') : null;
+
+      if (activeEngineRef.current === 'audio' && audioEl) {
+        time = Math.round(audioEl.currentTime || 0);
+      } else if (playerRef.current && playerRef.current.getCurrentTime) {
+        try {
+          time = Math.round(playerRef.current.getCurrentTime() || 0);
         } catch (e) {}
       }
-    }, 1500);
+
+      if (time !== undefined && !isNaN(time)) {
+        setCurrentTime(time);
+        currentTimeRef.current = time;
+
+        const now = Date.now();
+        if (now - lastSaveTimeRef.current > 4000) {
+          lastSaveTimeRef.current = now;
+          saveState({ currentTime: time });
+          updateMediaSessionPosition(time, durationRef.current);
+        }
+
+        // 🔒 Spotify guest preview restriction: non-logged-in users can only play 30 seconds
+        if (!userRef.current && time >= 30) {
+          pauseTrack();
+          showToast('Preview ended (30s) — Sign in to listen to full tracks and download offline.');
+        }
+      }
+    }, 250);
   };
 
   const stopProgressTimer = () => {
@@ -821,87 +852,76 @@ export const PlayerProvider = ({ children }) => {
 
     getOfflineAudioUrl(track.id).then((offlineUrl) => {
       const audioEl = typeof document !== 'undefined' ? document.getElementById('musicfy-offline-audio') : null;
-      if (!audioEl) return;
 
-      let audioSource = offlineUrl;
-      // High-fidelity native audio stream (allows seamless cross-tab & cross-app background play)
-      if (!audioSource) {
-        const base = api.defaults.baseURL || '/api';
-        audioSource = `${base}/music/stream/${track.id}`;
-      }
+      if (offlineUrl && audioEl) {
+        // High fidelity offline cached track playback
+        activeEngineRef.current = 'audio';
+        if (playerRef.current && playerRef.current.pauseVideo) {
+          try { playerRef.current.pauseVideo(); } catch (e) {}
+        }
+        audioEl.src = offlineUrl;
+        audioEl.currentTime = startTime;
+        audioEl.volume = (isMuted ? 0 : volume) / 100;
+        audioEl.play().catch(() => {});
 
-      // Stop YouTube iframe to prevent audio overlap
-      if (playerRef.current && playerRef.current.pauseVideo) {
-        try { playerRef.current.pauseVideo(); } catch (e) {}
-      }
+        audioEl.ontimeupdate = () => {
+          if (isScrubbingRef.current) return;
+          const t = Math.round(audioEl.currentTime);
+          setCurrentTime(t);
+          currentTimeRef.current = t;
+        };
 
-      audioEl.src = audioSource;
-      audioEl.currentTime = startTime;
-      audioEl.volume = (isMuted ? 0 : volume) / 100;
-
-      const playPromise = audioEl.play();
-      if (playPromise && playPromise.catch) {
-        playPromise.catch((err) => {
-          console.warn('Native stream autoplay blocked or error, falling back to YouTube iframe:', err);
-          if (playerRef.current && playerRef.current.loadVideoById) {
-            playerRef.current.loadVideoById({
-              videoId: track.id,
-              startSeconds: startTime
-            });
+        audioEl.onloadedmetadata = () => {
+          if (audioEl.duration && !isNaN(audioEl.duration) && isFinite(audioEl.duration)) {
+            const d = Math.round(audioEl.duration);
+            setDuration(d);
+            updateMediaSessionPosition(startTime, d);
           }
-        });
+        };
+
+        audioEl.onended = () => {
+          recordWebTrackListening(track, true);
+          handleTrackEnded();
+        };
+
+        audioEl.onplay = () => {
+          setIsPlaying(true);
+          updateMediaSessionPlaybackState(true);
+          startKeepAliveAudio();
+        };
+
+        audioEl.onpause = () => {
+          if (userInitiatedPauseRef.current) {
+            setIsPlaying(false);
+            updateMediaSessionPlaybackState(false);
+          }
+        };
+        return;
       }
 
-      audioEl.ontimeupdate = () => {
-        const t = Math.round(audioEl.currentTime);
-        setCurrentTime(t);
-        saveState({ currentTime: t });
-        updateMediaSessionPosition(t, durationRef.current);
-
-        // 🔒 Spotify guest preview restriction
-        if (!userRef.current && t >= 30) {
+      // Online playback via YouTube IFrame Audio Engine
+      activeEngineRef.current = 'youtube';
+      if (audioEl) {
+        try {
           audioEl.pause();
-          setIsPlaying(false);
-          stopKeepAliveAudio();
-          showToast('Preview ended (30s) — Sign in to listen to full tracks and download offline.');
-        }
-      };
+          audioEl.removeAttribute('src');
+          audioEl.load();
+        } catch (e) {}
+      }
 
-      audioEl.onloadedmetadata = () => {
-        if (audioEl.duration && !isNaN(audioEl.duration) && isFinite(audioEl.duration)) {
-          const d = Math.round(audioEl.duration);
-          setDuration(d);
-          updateMediaSessionPosition(startTime, d);
-        }
-      };
-
-      audioEl.onended = () => {
-        recordWebTrackListening(track, true);
-        handleTrackEnded();
-      };
-
-      audioEl.onplay = () => {
-        setIsPlaying(true);
-        updateMediaSessionPlaybackState(true);
-        startKeepAliveAudio();
-      };
-
-      audioEl.onpause = () => {
-        if (userInitiatedPauseRef.current) {
-          setIsPlaying(false);
-          updateMediaSessionPlaybackState(false);
-        }
-      };
-
-      audioEl.onerror = () => {
-        console.warn('Native stream error, falling back to YouTube iframe for track', track.id);
-        if (playerRef.current && playerRef.current.loadVideoById) {
+      if (playerRef.current && playerRef.current.loadVideoById) {
+        try {
           playerRef.current.loadVideoById({
             videoId: track.id,
-            startSeconds: audioEl.currentTime || startTime
+            startSeconds: startTime
           });
+          playerRef.current.playVideo();
+          setIsPlaying(true);
+          startProgressTimer();
+        } catch (err) {
+          console.warn('YouTube playback error:', err);
         }
-      };
+      }
     });
   };
 
@@ -909,7 +929,9 @@ export const PlayerProvider = ({ children }) => {
     const audioEl = typeof document !== 'undefined' ? document.getElementById('musicfy-offline-audio') : null;
     if (isPlaying) {
       userInitiatedPauseRef.current = true;
-      if (audioEl && !audioEl.paused) audioEl.pause();
+      if (activeEngineRef.current === 'audio' && audioEl && !audioEl.paused) {
+        audioEl.pause();
+      }
       if (playerRef.current && playerRef.current.pauseVideo) {
         try { playerRef.current.pauseVideo(); } catch (e) {}
       }
@@ -924,18 +946,14 @@ export const PlayerProvider = ({ children }) => {
       requestWakeLock();
       startPipAnimation(currentTrackRef.current);
       updateMediaSessionPlaybackState(true);
+      setIsPlaying(true);
 
-      if (audioEl && audioEl.src) {
-        audioEl.play().catch(() => {
-          if (playerRef.current && playerRef.current.playVideo) {
-            playerRef.current.playVideo();
-          }
-        });
-        setIsPlaying(true);
+      if (activeEngineRef.current === 'audio' && audioEl && audioEl.src) {
+        audioEl.play().catch(() => {});
       } else if (playerRef.current && playerRef.current.playVideo) {
-        playerRef.current.playVideo();
-        setIsPlaying(true);
+        try { playerRef.current.playVideo(); } catch (e) {}
       }
+      startProgressTimer();
     }
   };
 
@@ -997,22 +1015,20 @@ export const PlayerProvider = ({ children }) => {
   };
 
   const seekTo = (seconds) => {
-    const sec = Math.max(0, Math.min(durationRef.current, Math.round(seconds)));
+    const sec = Math.max(0, Math.min(durationRef.current || 300, Math.round(seconds)));
+    setCurrentTime(sec);
+    currentTimeRef.current = sec;
+
     const audioEl = typeof document !== 'undefined' ? document.getElementById('musicfy-offline-audio') : null;
-    if (audioEl && audioEl.src) {
+
+    if (activeEngineRef.current === 'audio' && audioEl && audioEl.src) {
       try { audioEl.currentTime = sec; } catch (e) {}
-      setCurrentTime(sec);
-      saveState({ currentTime: sec });
-      updateMediaSessionPosition(sec, durationRef.current);
-      return;
+    } else if (playerRef.current && playerRef.current.seekTo) {
+      try { playerRef.current.seekTo(sec, true); } catch (e) {}
     }
 
-    if (playerRef.current && playerRef.current.seekTo) {
-      playerRef.current.seekTo(sec, true);
-      setCurrentTime(sec);
-      saveState({ currentTime: sec });
-      updateMediaSessionPosition(sec, durationRef.current);
-    }
+    updateMediaSessionPosition(sec, durationRef.current);
+    saveState({ currentTime: sec });
   };
 
   const setVolumeLevel = (val) => {
@@ -1283,6 +1299,7 @@ export const PlayerProvider = ({ children }) => {
       playNext,
       playPrev,
       seekTo,
+      setIsScrubbing: (val) => { isScrubbingRef.current = Boolean(val); },
       setVolumeLevel,
       toggleMute,
       playOfflineQueue,
