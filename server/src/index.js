@@ -143,9 +143,12 @@ server.listen(PORT, async () => {
     const userCount = await prisma.user.count().catch(() => 0);
     if (userCount === 0) {
       logger.info('Database empty. Running seed...');
-      import('./utils/seed.js');
+      const { seed } = await import('./utils/seed.js');
+      await seed();
     }
-  } catch (e) {}
+  } catch (e) {
+    logger.warn('Seed initialization notice:', e.message);
+  }
 
   // Run cleanup job every 24 hours
   setInterval(runCleanupJob, 24 * 60 * 60 * 1000);

@@ -26,8 +26,8 @@ export const validateRegisterInput = (req, res, next) => {
 };
 
 export const validateLoginInput = (req, res, next) => {
-  const { email, password, emailOrUsername } = req.body;
-  const input = email || emailOrUsername;
+  const { email, password, emailOrUsername, username, identifier } = req.body;
+  const input = email || emailOrUsername || username || identifier;
 
   if (!input || typeof input !== 'string' || !input.trim()) {
     return res.status(400).json({

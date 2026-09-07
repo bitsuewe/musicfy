@@ -143,8 +143,8 @@ export const register = async (req, res) => {
 
 export const login = async (req, res) => {
   try {
-    const { email, password, emailOrUsername } = req.body;
-    const input = (email || emailOrUsername || '').trim();
+    const { email, password, emailOrUsername, username, identifier } = req.body;
+    const input = (email || emailOrUsername || username || identifier || '').trim();
 
     if (!input || !password) {
       return res.status(400).json({
