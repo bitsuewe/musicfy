@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node src/index.js",
     "build": "prisma generate && node scripts/ensure-ytdlp.js",
-    "postinstall": "node scripts/ensure-ytdlp.js",
+    "postinstall": "prisma generate && node scripts/ensure-ytdlp.js",
     "dev": "node --watch src/index.js",
     "test": "node --test tests/api.test.js",
     "prisma:generate": "prisma generate",

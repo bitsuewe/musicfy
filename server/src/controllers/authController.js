@@ -136,7 +136,7 @@ export const register = async (req, res) => {
     }
     return res.status(500).json({
       success: false,
-      error: { code: 'SERVER_ERROR', message: 'Failed to create account. Please try again.' }
+      error: { code: 'SERVER_ERROR', message: 'Failed to create account. Please try again.', details: err.message }
     });
   }
 };
@@ -205,7 +205,7 @@ export const login = async (req, res) => {
     logger.error('Login controller error:', err);
     return res.status(500).json({
       success: false,
-      error: { code: 'SERVER_ERROR', message: 'Login failed. Please try again.' }
+      error: { code: 'SERVER_ERROR', message: 'Login failed. Please try again.', details: err.message }
     });
   }
 };
