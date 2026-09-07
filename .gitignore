@@ -33,6 +33,12 @@ web-build/
 *.apk
 *.aab
 
+# Standalone Tools
+yt-dlp
+yt-dlp.exe
+**/yt-dlp
+**/yt-dlp.exe
+
 # Production & Build outputs
 dist/
 dist-ssr/
