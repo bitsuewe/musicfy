@@ -131,16 +131,16 @@ function AppContent() {
         </div>
       )}
 
-      {/* YouTube IFrame Container, Mobile Background Audio Keeper, Offline Audio Player & PiP Carrier */}
+      {/* High-Fidelity Audio Engine, Background Keeper & Picture-in-Picture (PiP) Carrier */}
       <div 
         aria-hidden="true" 
-        className="fixed bottom-0 right-0 w-[1px] h-[1px] pointer-events-none opacity-[0.001] overflow-hidden -z-50"
-        style={{ transform: 'translateZ(0)' }}
+        className="fixed pointer-events-none opacity-[0.001] overflow-hidden -z-50"
+        style={{ transform: 'translateZ(0)', position: 'fixed', bottom: '-9999px', right: '-9999px', width: '320px', height: '180px' }}
       >
-        <div id="musicfy-yt-player-iframe" />
-        {/* Offline Audio Player Engine */}
-        <audio id="musicfy-offline-audio" playsInline preload="auto" />
-        {/* Silent HTML5 audio keeper: enables iOS AVAudioSession and Android AudioFocus background lockscreen audio */}
+        <div id="musicfy-yt-player-iframe" style={{ width: '320px', height: '180px' }} />
+        {/* High-Fidelity Native HTML5 Audio Engine (Both online stream & offline cached tracks) */}
+        <audio id="musicfy-offline-audio" playsInline preload="auto" crossOrigin="anonymous" />
+        {/* Mobile Background Audio Anchor */}
         <audio
           id="musicfy-bg-audio-anchor"
           loop
@@ -148,9 +148,9 @@ function AppContent() {
           preload="auto"
           src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"
         />
-        {/* Floating Background Picture-in-Picture (PiP) Stream Engine */}
+        {/* Floating Background Picture-in-Picture (PiP) Engine */}
         <canvas id="musicfy-pip-canvas" width="512" height="512" />
-        <video id="musicfy-pip-video" playsInline muted autoPlay />
+        <video id="musicfy-pip-video" playsInline autoPlay />
       </div>
 
       {/* Desktop Sidebar */}

@@ -116,27 +116,65 @@ export const PlayerProvider = ({ children }) => {
   useEffect(() => { shuffleRef.current = shuffle; }, [shuffle]);
   useEffect(() => { autoPlaySimilarRef.current = autoPlaySimilar; }, [autoPlaySimilar]);
 
-  // Mobile Background Audio Keep-Alive Anchor (Audio Session keeper)
-  const startAudioAnchor = useCallback(() => {
+  const audioContextRef = useRef(null);
+  const keepAliveOscRef = useRef(null);
+
+  // Web Audio Continuous Background Keeper: Keeps the browser tab marked as Audible and active
+  const startKeepAliveAudio = useCallback(() => {
     try {
+      if (typeof window === 'undefined') return;
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+
+      if (!audioContextRef.current) {
+        audioContextRef.current = new AudioCtx();
+      }
+      const ctx = audioContextRef.current;
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+      if (!keepAliveOscRef.current) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        gain.gain.value = 0.0001; // Inaudible (-80dB), prevents background audio suspension
+        osc.frequency.value = 40;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        keepAliveOscRef.current = osc;
+      }
+      if (navigator.audioSession) {
+        navigator.audioSession.type = 'playback';
+      }
+
+      // Also trigger silent HTML5 audio element
       const anchor = document.getElementById('musicfy-bg-audio-anchor');
       if (anchor) {
         anchor.muted = false;
-        anchor.volume = 0.01; // Inaudible audio level keeping iOS/Android AudioSession active
+        anchor.volume = 0.01;
         const p = anchor.play();
         if (p && p.catch) p.catch(() => {});
       }
     } catch (e) {}
   }, []);
 
-  const stopAudioAnchor = useCallback(() => {
+  const stopKeepAliveAudio = useCallback(() => {
     try {
-      const anchor = document.getElementById('musicfy-bg-audio-anchor');
-      if (anchor) {
-        anchor.pause();
+      if (keepAliveOscRef.current) {
+        try { keepAliveOscRef.current.stop(); } catch (e) {}
+        try { keepAliveOscRef.current.disconnect(); } catch (e) {}
+        keepAliveOscRef.current = null;
       }
+      if (audioContextRef.current && audioContextRef.current.state === 'running') {
+        audioContextRef.current.suspend().catch(() => {});
+      }
+      const anchor = document.getElementById('musicfy-bg-audio-anchor');
+      if (anchor) anchor.pause();
     } catch (e) {}
   }, []);
+
+  const startAudioAnchor = startKeepAliveAudio;
+  const stopAudioAnchor = stopKeepAliveAudio;
 
   const [keepScreenAwake, setKeepScreenAwake] = useState(true);
   const [isPipActive, setIsPipActive] = useState(false);
@@ -167,44 +205,136 @@ export const PlayerProvider = ({ children }) => {
     }
   }, []);
 
-  // Update Picture-in-Picture Canvas Stream
-  const updatePipCanvas = useCallback((track) => {
+  const pipAnimIntervalRef = useRef(null);
+  const pipArtworkImgRef = useRef(null);
+  const pipVinylAngleRef = useRef(0);
+
+  // Live Picture-in-Picture Frame Renderer with Rotating Vinyl, Live Album Art & Progress
+  const startPipAnimation = useCallback((track) => {
     try {
       const canvas = document.getElementById('musicfy-pip-canvas');
       const video = document.getElementById('musicfy-pip-video');
       if (!canvas || !video || !track) return;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
 
+      // Preload current track artwork
       const img = new Image();
       img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        // Draw background & artwork
+      img.src = track.thumbnail || 'https://i.ytimg.com/vi/fHI8X4OXluQ/hqdefault.jpg';
+      pipArtworkImgRef.current = img;
+
+      // Ensure stream is bound to video element with active track
+      if (!video.srcObject && canvas.captureStream) {
+        try {
+          const stream = canvas.captureStream(15);
+          video.srcObject = stream;
+          video.play().catch(() => {});
+        } catch (e) {}
+      }
+
+      if (pipAnimIntervalRef.current) {
+        clearInterval(pipAnimIntervalRef.current);
+      }
+
+      pipAnimIntervalRef.current = setInterval(() => {
+        const cv = document.getElementById('musicfy-pip-canvas');
+        if (!cv) return;
+        const ctx = cv.getContext('2d');
+        if (!ctx) return;
+
+        const w = 512;
+        const h = 512;
+
+        // 1. Dark Gradient Background
+        const bgGrad = ctx.createLinearGradient(0, 0, w, h);
+        bgGrad.addColorStop(0, '#09090B');
+        bgGrad.addColorStop(1, '#18181C');
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, w, h);
+
+        // 2. Animated Rotating Vinyl Record (behind album art)
+        if (isPlayingRef.current) {
+          pipVinylAngleRef.current = (pipVinylAngleRef.current + 0.04) % (Math.PI * 2);
+        }
+        ctx.save();
+        ctx.translate(330, 200);
+        ctx.rotate(pipVinylAngleRef.current);
+        ctx.beginPath();
+        ctx.arc(0, 0, 140, 0, Math.PI * 2);
+        ctx.fillStyle = '#141418';
+        ctx.fill();
+        ctx.strokeStyle = '#27272A';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        for (let r = 120; r > 45; r -= 18) {
+          ctx.beginPath();
+          ctx.arc(0, 0, r, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+        // Center label
+        ctx.beginPath();
+        ctx.arc(0, 0, 42, 0, Math.PI * 2);
+        ctx.fillStyle = '#10B981';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(0, 0, 12, 0, Math.PI * 2);
         ctx.fillStyle = '#09090B';
-        ctx.fillRect(0, 0, 512, 512);
-        ctx.drawImage(img, 46, 30, 420, 420);
+        ctx.fill();
+        ctx.restore();
 
-        // Dark gradient pill
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-        ctx.fillRect(0, 410, 512, 102);
+        // 3. Album Art Card
+        const art = pipArtworkImgRef.current;
+        if (art && art.complete && art.naturalWidth > 0) {
+          ctx.save();
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+          ctx.shadowBlur = 24;
+          ctx.drawImage(art, 32, 60, 260, 260);
+          ctx.restore();
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(32, 60, 260, 260);
+        }
 
-        // Title and artist
+        // 4. Live Player Info Banner (Bottom)
+        ctx.fillStyle = 'rgba(18, 18, 22, 0.96)';
+        ctx.fillRect(0, 360, w, 152);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.fillRect(0, 360, w, 1);
+
+        // Song Title
+        const cur = currentTrackRef.current;
         ctx.fillStyle = '#FAFAFA';
         ctx.font = 'bold 22px system-ui, -apple-system, sans-serif';
-        ctx.fillText((track.title || 'Track').slice(0, 28), 24, 450);
+        ctx.fillText((cur?.title || 'Musicfy').slice(0, 24), 28, 404);
 
+        // Artist Name
         ctx.fillStyle = '#10B981';
-        ctx.font = 'bold 16px system-ui, -apple-system, sans-serif';
-        ctx.fillText((track.artistName || 'Artist').slice(0, 32), 24, 485);
+        ctx.font = '600 16px system-ui, -apple-system, sans-serif';
+        ctx.fillText((cur?.artistName || 'Artist').slice(0, 30), 28, 434);
 
-        if (!video.srcObject && canvas.captureStream) {
-          video.srcObject = canvas.captureStream(5);
-          video.play().catch(() => {});
+        // Dynamic Equalizer Bars
+        const colors = ['#10B981', '#34D399', '#6EE7B7', '#10B981'];
+        for (let i = 0; i < 4; i++) {
+          const barHeight = isPlayingRef.current ? Math.sin(Date.now() / 140 + i * 1.3) * 12 + 16 : 4;
+          ctx.fillStyle = colors[i];
+          ctx.fillRect(435 + i * 13, 434 - barHeight, 8, barHeight);
         }
-      };
-      img.src = track.thumbnail || 'https://i.ytimg.com/vi/fHI8X4OXluQ/hqdefault.jpg';
+
+        // Live Progress Bar (Bottom 6px)
+        const cSec = currentTimeRef.current || 0;
+        const dSec = durationRef.current || 200;
+        const pct = Math.min(1, Math.max(0, cSec / (dSec || 1)));
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+        ctx.fillRect(0, 506, w, 6);
+        ctx.fillStyle = '#10B981';
+        ctx.fillRect(0, 506, w * pct, 6);
+      }, 66);
     } catch (e) {}
   }, []);
+
+  const updatePipCanvas = startPipAnimation;
 
   // Toggle Native Picture-in-Picture Floating Player (Allows cross-app multitasking on iOS/Android)
   const togglePictureInPicture = async () => {
@@ -216,16 +346,52 @@ export const PlayerProvider = ({ children }) => {
         await document.exitPictureInPicture();
         setIsPipActive(false);
       } else if (document.pictureInPictureEnabled && video.requestPictureInPicture) {
-        updatePipCanvas(currentTrackRef.current);
+        startPipAnimation(currentTrackRef.current);
         await video.play().catch(() => {});
         await video.requestPictureInPicture();
         setIsPipActive(true);
-        showToast('Floating Background Player active! You can now switch to other apps.');
+        showToast('Floating Player active! Music continues playing across all apps.');
       }
     } catch (e) {
-      showToast('Floating Player not supported on this browser');
+      console.warn('PiP error:', e);
+      showToast('Floating Player not supported on this device/browser');
     }
   };
+
+  // Sync Picture-in-Picture open/close state
+  useEffect(() => {
+    const video = document.getElementById('musicfy-pip-video');
+    if (!video) return;
+    const onEnter = () => setIsPipActive(true);
+    const onLeave = () => {
+      setIsPipActive(false);
+      if (pipAnimIntervalRef.current) clearInterval(pipAnimIntervalRef.current);
+    };
+    video.addEventListener('enterpictureinpicture', onEnter);
+    video.addEventListener('leavepictureinpicture', onLeave);
+    return () => {
+      video.removeEventListener('enterpictureinpicture', onEnter);
+      video.removeEventListener('leavepictureinpicture', onLeave);
+    };
+  }, []);
+
+  // Global Page Visibility Listener: Prevent background audio suspension on tab switch
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.hidden) {
+        const audioEl = document.getElementById('musicfy-offline-audio');
+        if (audioEl && isPlayingRef.current && audioEl.paused && !userInitiatedPauseRef.current) {
+          audioEl.play().catch(() => {});
+        }
+      } else {
+        if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+          audioContextRef.current.resume().catch(() => {});
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
 
   // Media Session & Native Android Foreground Notification Sync
   const updateMediaSessionMetadata = useCallback((track) => {
@@ -446,9 +612,9 @@ export const PlayerProvider = ({ children }) => {
           if (event.data === window.YT.PlayerState.PLAYING) {
             userInitiatedPauseRef.current = false;
             setIsPlaying(true);
-            startAudioAnchor();
+            startKeepAliveAudio();
             requestWakeLock();
-            updatePipCanvas(currentTrackRef.current);
+            startPipAnimation(currentTrackRef.current);
             updateMediaSessionPlaybackState(true);
             const d = event.target.getDuration();
             if (d) {
@@ -458,9 +624,8 @@ export const PlayerProvider = ({ children }) => {
             }
             startProgressTimer();
           } else if (event.data === window.YT.PlayerState.PAUSED) {
-            // Check if pause was an involuntary mobile background suspension
-            if (document.hidden && !userInitiatedPauseRef.current) {
-              // Attempt automatic background wake-up
+            // If pause was an involuntary background suspension (not user-initiated), do not drop state
+            if (!userInitiatedPauseRef.current && isPlayingRef.current) {
               try {
                 if (playerRef.current && playerRef.current.playVideo) {
                   playerRef.current.playVideo();
@@ -468,7 +633,7 @@ export const PlayerProvider = ({ children }) => {
               } catch (e) {}
             } else {
               setIsPlaying(false);
-              stopAudioAnchor();
+              stopKeepAliveAudio();
               releaseWakeLock();
               updateMediaSessionPlaybackState(false);
               stopProgressTimer();
@@ -486,13 +651,13 @@ export const PlayerProvider = ({ children }) => {
 
   const pauseTrack = () => {
     userInitiatedPauseRef.current = true;
-    const offlineAudioEl = typeof document !== 'undefined' ? document.getElementById('musicfy-offline-audio') : null;
-    if (offlineAudioEl) offlineAudioEl.pause();
+    const audioEl = typeof document !== 'undefined' ? document.getElementById('musicfy-offline-audio') : null;
+    if (audioEl && !audioEl.paused) audioEl.pause();
     if (playerRef.current && playerRef.current.pauseVideo) {
       try { playerRef.current.pauseVideo(); } catch (e) {}
     }
     setIsPlaying(false);
-    stopAudioAnchor();
+    stopKeepAliveAudio();
     releaseWakeLock();
     updateMediaSessionPlaybackState(false);
     saveState();
@@ -622,9 +787,9 @@ export const PlayerProvider = ({ children }) => {
     setCurrentTime(startTime);
     setDuration(track.durationSec || 200);
 
-    startAudioAnchor();
+    startKeepAliveAudio();
     requestWakeLock();
-    updatePipCanvas(track);
+    startPipAnimation(track);
     updateMediaSessionMetadata(track);
     updateMediaSessionPlaybackState(true);
     updateMediaSessionPosition(startTime, track.durationSec || 200);
@@ -655,104 +820,122 @@ export const PlayerProvider = ({ children }) => {
     recordWebTrackListening(track, false);
 
     getOfflineAudioUrl(track.id).then((offlineUrl) => {
-      const offlineAudioEl = typeof document !== 'undefined' ? document.getElementById('musicfy-offline-audio') : null;
-      if (offlineUrl && offlineAudioEl) {
-        if (playerRef.current && playerRef.current.pauseVideo) {
-          try { playerRef.current.pauseVideo(); } catch (e) {}
-        }
-        offlineAudioEl.src = offlineUrl;
-        offlineAudioEl.currentTime = startTime;
-        offlineAudioEl.volume = (isMuted ? 0 : volume) / 100;
-        offlineAudioEl.play().catch(() => {});
-        offlineAudioEl.ontimeupdate = () => {
-          const t = Math.round(offlineAudioEl.currentTime);
-          setCurrentTime(t);
-          saveState({ currentTime: t });
-          updateMediaSessionPosition(t, durationRef.current);
+      const audioEl = typeof document !== 'undefined' ? document.getElementById('musicfy-offline-audio') : null;
+      if (!audioEl) return;
 
-          // 🔒 Spotify guest preview restriction for offline audio
-          if (!userRef.current && t >= 30) {
-            offlineAudioEl.pause();
-            setIsPlaying(false);
-            showToast('Preview ended (30s) — Sign in to listen to full tracks and download offline.');
+      let audioSource = offlineUrl;
+      // High-fidelity native audio stream (allows seamless cross-tab & cross-app background play)
+      if (!audioSource) {
+        const base = api.defaults.baseURL || '/api';
+        audioSource = `${base}/music/stream/${track.id}`;
+      }
+
+      // Stop YouTube iframe to prevent audio overlap
+      if (playerRef.current && playerRef.current.pauseVideo) {
+        try { playerRef.current.pauseVideo(); } catch (e) {}
+      }
+
+      audioEl.src = audioSource;
+      audioEl.currentTime = startTime;
+      audioEl.volume = (isMuted ? 0 : volume) / 100;
+
+      const playPromise = audioEl.play();
+      if (playPromise && playPromise.catch) {
+        playPromise.catch((err) => {
+          console.warn('Native stream autoplay blocked or error, falling back to YouTube iframe:', err);
+          if (playerRef.current && playerRef.current.loadVideoById) {
+            playerRef.current.loadVideoById({
+              videoId: track.id,
+              startSeconds: startTime
+            });
           }
-        };
-        offlineAudioEl.onloadedmetadata = () => {
-          if (offlineAudioEl.duration) {
-            const d = Math.round(offlineAudioEl.duration);
-            setDuration(d);
-            updateMediaSessionPosition(startTime, d);
-          }
-        };
-        offlineAudioEl.onended = () => {
-          recordWebTrackListening(track, true);
-          handleTrackEnded();
-        };
-        offlineAudioEl.onplay = () => {
-          setIsPlaying(true);
-          updateMediaSessionPlaybackState(true);
-        };
-        offlineAudioEl.onpause = () => {
-          if (userInitiatedPauseRef.current) {
-            setIsPlaying(false);
-            updateMediaSessionPlaybackState(false);
-          }
-        };
-      } else {
-        if (offlineAudioEl) {
-          offlineAudioEl.pause();
-          offlineAudioEl.src = '';
+        });
+      }
+
+      audioEl.ontimeupdate = () => {
+        const t = Math.round(audioEl.currentTime);
+        setCurrentTime(t);
+        saveState({ currentTime: t });
+        updateMediaSessionPosition(t, durationRef.current);
+
+        // 🔒 Spotify guest preview restriction
+        if (!userRef.current && t >= 30) {
+          audioEl.pause();
+          setIsPlaying(false);
+          stopKeepAliveAudio();
+          showToast('Preview ended (30s) — Sign in to listen to full tracks and download offline.');
         }
+      };
+
+      audioEl.onloadedmetadata = () => {
+        if (audioEl.duration && !isNaN(audioEl.duration) && isFinite(audioEl.duration)) {
+          const d = Math.round(audioEl.duration);
+          setDuration(d);
+          updateMediaSessionPosition(startTime, d);
+        }
+      };
+
+      audioEl.onended = () => {
+        recordWebTrackListening(track, true);
+        handleTrackEnded();
+      };
+
+      audioEl.onplay = () => {
+        setIsPlaying(true);
+        updateMediaSessionPlaybackState(true);
+        startKeepAliveAudio();
+      };
+
+      audioEl.onpause = () => {
+        if (userInitiatedPauseRef.current) {
+          setIsPlaying(false);
+          updateMediaSessionPlaybackState(false);
+        }
+      };
+
+      audioEl.onerror = () => {
+        console.warn('Native stream error, falling back to YouTube iframe for track', track.id);
         if (playerRef.current && playerRef.current.loadVideoById) {
           playerRef.current.loadVideoById({
             videoId: track.id,
-            startSeconds: startTime
+            startSeconds: audioEl.currentTime || startTime
           });
         }
-      }
+      };
     });
   };
 
   const togglePlay = () => {
-    const offlineAudioEl = typeof document !== 'undefined' ? document.getElementById('musicfy-offline-audio') : null;
-    if (offlineAudioEl && offlineAudioEl.src && offlineAudioEl.src.startsWith('blob:')) {
-      if (isPlaying) {
-        userInitiatedPauseRef.current = true;
-        offlineAudioEl.pause();
-        setIsPlaying(false);
-        stopAudioAnchor();
-        releaseWakeLock();
-        updateMediaSessionPlaybackState(false);
-        saveState();
-      } else {
-        userInitiatedPauseRef.current = false;
-        offlineAudioEl.play().catch(() => {});
-        setIsPlaying(true);
-        startAudioAnchor();
-        requestWakeLock();
-        updatePipCanvas(currentTrackRef.current);
-        updateMediaSessionPlaybackState(true);
-      }
-      return;
-    }
-
-    if (!playerRef.current) return;
+    const audioEl = typeof document !== 'undefined' ? document.getElementById('musicfy-offline-audio') : null;
     if (isPlaying) {
       userInitiatedPauseRef.current = true;
-      playerRef.current.pauseVideo();
+      if (audioEl && !audioEl.paused) audioEl.pause();
+      if (playerRef.current && playerRef.current.pauseVideo) {
+        try { playerRef.current.pauseVideo(); } catch (e) {}
+      }
       setIsPlaying(false);
-      stopAudioAnchor();
+      stopKeepAliveAudio();
       releaseWakeLock();
       updateMediaSessionPlaybackState(false);
       saveState();
     } else {
       userInitiatedPauseRef.current = false;
-      playerRef.current.playVideo();
-      setIsPlaying(true);
-      startAudioAnchor();
+      startKeepAliveAudio();
       requestWakeLock();
-      updatePipCanvas(currentTrackRef.current);
+      startPipAnimation(currentTrackRef.current);
       updateMediaSessionPlaybackState(true);
+
+      if (audioEl && audioEl.src) {
+        audioEl.play().catch(() => {
+          if (playerRef.current && playerRef.current.playVideo) {
+            playerRef.current.playVideo();
+          }
+        });
+        setIsPlaying(true);
+      } else if (playerRef.current && playerRef.current.playVideo) {
+        playerRef.current.playVideo();
+        setIsPlaying(true);
+      }
     }
   };
 
@@ -815,9 +998,9 @@ export const PlayerProvider = ({ children }) => {
 
   const seekTo = (seconds) => {
     const sec = Math.max(0, Math.min(durationRef.current, Math.round(seconds)));
-    const offlineAudioEl = typeof document !== 'undefined' ? document.getElementById('musicfy-offline-audio') : null;
-    if (offlineAudioEl && offlineAudioEl.src && offlineAudioEl.src.startsWith('blob:')) {
-      offlineAudioEl.currentTime = sec;
+    const audioEl = typeof document !== 'undefined' ? document.getElementById('musicfy-offline-audio') : null;
+    if (audioEl && audioEl.src) {
+      try { audioEl.currentTime = sec; } catch (e) {}
       setCurrentTime(sec);
       saveState({ currentTime: sec });
       updateMediaSessionPosition(sec, durationRef.current);
@@ -835,8 +1018,8 @@ export const PlayerProvider = ({ children }) => {
   const setVolumeLevel = (val) => {
     setVolume(val);
     saveState({ volume: val });
-    const offlineAudioEl = typeof document !== 'undefined' ? document.getElementById('musicfy-offline-audio') : null;
-    if (offlineAudioEl) offlineAudioEl.volume = val / 100;
+    const audioEl = typeof document !== 'undefined' ? document.getElementById('musicfy-offline-audio') : null;
+    if (audioEl) audioEl.volume = val / 100;
 
     if (playerRef.current && playerRef.current.setVolume) {
       playerRef.current.setVolume(val);
@@ -846,16 +1029,16 @@ export const PlayerProvider = ({ children }) => {
   };
 
   const toggleMute = () => {
-    const offlineAudioEl = typeof document !== 'undefined' ? document.getElementById('musicfy-offline-audio') : null;
-    if (offlineAudioEl) offlineAudioEl.muted = !isMuted;
+    const nextMuted = !isMuted;
+    setIsMuted(nextMuted);
+    const audioEl = typeof document !== 'undefined' ? document.getElementById('musicfy-offline-audio') : null;
+    if (audioEl) audioEl.muted = nextMuted;
 
     if (!playerRef.current) return;
-    if (isMuted) {
-      playerRef.current.unMute();
-      setIsMuted(false);
-    } else {
+    if (nextMuted) {
       playerRef.current.mute();
-      setIsMuted(true);
+    } else {
+      playerRef.current.unMute();
     }
   };
 
@@ -866,21 +1049,18 @@ export const PlayerProvider = ({ children }) => {
     const handlers = [
       ['play', () => {
         userInitiatedPauseRef.current = false;
-        if (playerRef.current && playerRef.current.playVideo) {
+        const audioEl = document.getElementById('musicfy-offline-audio');
+        if (audioEl && audioEl.src) {
+          audioEl.play().catch(() => {});
+        } else if (playerRef.current && playerRef.current.playVideo) {
           playerRef.current.playVideo();
-          setIsPlaying(true);
-          startAudioAnchor();
-          updateMediaSessionPlaybackState(true);
         }
+        setIsPlaying(true);
+        startKeepAliveAudio();
+        updateMediaSessionPlaybackState(true);
       }],
       ['pause', () => {
-        userInitiatedPauseRef.current = true;
-        if (playerRef.current && playerRef.current.pauseVideo) {
-          playerRef.current.pauseVideo();
-          setIsPlaying(false);
-          stopAudioAnchor();
-          updateMediaSessionPlaybackState(false);
-        }
+        pauseTrack();
       }],
       ['previoustrack', () => playPrev()],
       ['nexttrack', () => playNext()],
@@ -898,13 +1078,7 @@ export const PlayerProvider = ({ children }) => {
         seekTo(Math.min(durationRef.current, currentTimeRef.current + offset));
       }],
       ['stop', () => {
-        userInitiatedPauseRef.current = true;
-        if (playerRef.current && playerRef.current.pauseVideo) {
-          playerRef.current.pauseVideo();
-          setIsPlaying(false);
-          stopAudioAnchor();
-          updateMediaSessionPlaybackState(false);
-        }
+        pauseTrack();
         seekTo(0);
       }]
     ];
