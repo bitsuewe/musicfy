@@ -150,7 +150,7 @@ function AppContent() {
         />
         {/* Floating Background Picture-in-Picture (PiP) Engine */}
         <canvas id="musicfy-pip-canvas" width="512" height="512" />
-        <video id="musicfy-pip-video" playsInline autoPlay />
+        <video id="musicfy-pip-video" playsInline autoPlay muted />
       </div>
 
       {/* Desktop Sidebar */}

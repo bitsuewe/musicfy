@@ -10,6 +10,7 @@ import {
   VolumeX,
   Shuffle,
   Repeat,
+  Repeat1,
   Heart,
   ListMusic,
   Maximize2,
@@ -83,11 +84,12 @@ export default function PersistentPlayer() {
     setScrubTime(Number(e.target.value));
   };
 
-  const handleScrubEnd = () => {
-    if (scrubTime !== null) {
-      seekTo(scrubTime);
-      setScrubTime(null);
+  const handleScrubCommit = (val) => {
+    const target = val !== undefined && !isNaN(val) ? val : scrubTime;
+    if (target !== null && !isNaN(target)) {
+      seekTo(target);
     }
+    setScrubTime(null);
     if (setIsScrubbing) setIsScrubbing(false);
   };
 
@@ -181,10 +183,16 @@ export default function PersistentPlayer() {
 
             <button
               onClick={setRepeatMode}
-              className={`p-1 hidden md:flex transition-colors ${repeatMode !== 'off' ? 'text-[#10B981]' : 'text-[#8E8E93] hover:text-white'}`}
-              title={`Repeat: ${repeatMode}`}
+              className={`p-1 transition-all rounded-lg active:scale-90 ${
+                repeatMode !== 'off' ? 'text-[#10B981]' : 'text-[#8E8E93] hover:text-white'
+              }`}
+              title={`Repeat: ${repeatMode === 'one' ? 'Single Track' : repeatMode === 'all' ? 'Entire Queue' : 'Off'} (Click to change)`}
             >
-              <Repeat className="w-3.5 h-3.5" />
+              {repeatMode === 'one' ? (
+                <Repeat1 className="w-3.5 h-3.5 text-[#10B981]" />
+              ) : (
+                <Repeat className="w-3.5 h-3.5" />
+              )}
             </button>
           </div>
 
@@ -229,8 +237,9 @@ export default function PersistentPlayer() {
                     onMouseDown={handleScrubStart}
                     onTouchStart={handleScrubStart}
                     onChange={handleScrubChange}
-                    onMouseUp={handleScrubEnd}
-                    onTouchEnd={handleScrubEnd}
+                    onMouseUp={(e) => handleScrubCommit(Number(e.target.value))}
+                    onTouchEnd={(e) => handleScrubCommit(Number(e.target.value))}
+                    onKeyUp={(e) => handleScrubCommit(Number(e.target.value))}
                     className="w-full h-[3px] group-hover/scrubber:h-[4.5px] rounded-full appearance-none cursor-pointer bg-white/25 accent-[#10B981] transition-all"
                   />
                 </div>
@@ -483,15 +492,26 @@ export default function PersistentPlayer() {
                   onMouseDown={handleScrubStart}
                   onTouchStart={handleScrubStart}
                   onChange={handleScrubChange}
-                  onMouseUp={handleScrubEnd}
-                  onTouchEnd={handleScrubEnd}
+                  onMouseUp={(e) => handleScrubCommit(Number(e.target.value))}
+                  onTouchEnd={(e) => handleScrubCommit(Number(e.target.value))}
+                  onKeyUp={(e) => handleScrubCommit(Number(e.target.value))}
                   className="w-full h-2 group-hover/fullscreen-scrubber:h-3 rounded-full appearance-none cursor-pointer bg-white/20 accent-[#10B981] transition-all shadow-inner"
                 />
               </div>
               <span className="w-12 tabular-nums font-mono">-{formatTime(Math.max(0, duration - activeTime))}</span>
             </div>
 
-            <div className="flex items-center justify-center gap-8 sm:gap-10">
+            <div className="flex items-center justify-center gap-6 sm:gap-10">
+              <button
+                onClick={setShuffle}
+                className={`p-2 sm:p-3 transition-transform active:scale-90 ${
+                  shuffle ? 'text-[#10B981]' : 'text-white/60 hover:text-white'
+                }`}
+                title="Shuffle"
+              >
+                <Shuffle className="w-5 h-5 sm:w-6 sm:h-6" />
+              </button>
+
               <button onClick={playPrev} className="p-2 sm:p-3 text-white/80 hover:text-white active:scale-90 transition-transform">
                 <SkipBack className="w-6 h-6 sm:w-8 sm:h-8 fill-current" />
               </button>
@@ -503,6 +523,20 @@ export default function PersistentPlayer() {
               </button>
               <button onClick={playNext} className="p-2 sm:p-3 text-white/80 hover:text-white active:scale-90 transition-transform">
                 <SkipForward className="w-6 h-6 sm:w-8 sm:h-8 fill-current" />
+              </button>
+
+              <button
+                onClick={setRepeatMode}
+                className={`p-2 sm:p-3 transition-transform active:scale-90 ${
+                  repeatMode !== 'off' ? 'text-[#10B981]' : 'text-white/60 hover:text-white'
+                }`}
+                title={`Repeat: ${repeatMode}`}
+              >
+                {repeatMode === 'one' ? (
+                  <Repeat1 className="w-5 h-5 sm:w-6 sm:h-6 text-[#10B981]" />
+                ) : (
+                  <Repeat className="w-5 h-5 sm:w-6 sm:h-6" />
+                )}
               </button>
             </div>
           </div>

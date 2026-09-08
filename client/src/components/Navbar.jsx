@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, Bell, User, LogIn, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { Search, Bell, User, LogIn, ChevronLeft, ChevronRight, X, Command } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 
 export default function Navbar({ onRequestAuth }) {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const [query, setQuery] = useState(searchParams.get('q') || '');
   const [notifications, setNotifications] = useState([]);
@@ -20,6 +21,30 @@ export default function Navbar({ onRequestAuth }) {
     }
   }, [user]);
 
+  // Synchronize input when URL search query changes (e.g. clicking trending or history chips)
+  useEffect(() => {
+    const urlQ = searchParams.get('q') || '';
+    setQuery(urlQ);
+  }, [searchParams]);
+
+  // Live debounced search navigation
+  useEffect(() => {
+    const trimmed = query.trim();
+    const currentUrlQ = searchParams.get('q') || '';
+
+    if (trimmed === currentUrlQ) return;
+
+    const timer = setTimeout(() => {
+      if (trimmed) {
+        navigate(`/discover?q=${encodeURIComponent(trimmed)}`, { replace: location.pathname === '/discover' });
+      } else if (location.pathname === '/discover' && currentUrlQ) {
+        navigate('/discover', { replace: true });
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [query, navigate, location.pathname, searchParams]);
+
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     if (query.trim()) {
@@ -27,9 +52,16 @@ export default function Navbar({ onRequestAuth }) {
     }
   };
 
+  const handleClear = () => {
+    setQuery('');
+    if (location.pathname === '/discover') {
+      navigate('/discover', { replace: true });
+    }
+  };
+
   return (
-    <header className="h-14 sm:h-16 px-3 sm:px-6 bg-[#09090B]/90 backdrop-blur-xl border-b border-[#27272A] flex items-center justify-between sticky top-0 z-20 select-none gap-2">
-      {/* Back / Forward Navigation & Search */}
+    <header className="h-14 sm:h-16 px-3 sm:px-6 bg-[#09090B]/95 backdrop-blur-xl border-b border-[#27272A] flex items-center justify-between sticky top-0 z-20 select-none gap-2">
+      {/* Back / Forward Navigation & Unified Global Search Bar */}
       <div className="flex items-center gap-1.5 sm:gap-3 flex-1 min-w-0">
         <div className="hidden sm:flex items-center gap-1.5">
           <button
@@ -48,25 +80,33 @@ export default function Navbar({ onRequestAuth }) {
           </button>
         </div>
 
-        {/* Responsive Global Search Bar */}
-        <form onSubmit={handleSearchSubmit} className="relative flex-1 max-w-xs sm:max-w-sm md:max-w-md">
-          <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1AA]" />
+        {/* Unified Top Search Bar across entire Musicfy application */}
+        <form onSubmit={handleSearchSubmit} className="relative flex-1 max-w-sm sm:max-w-md md:max-w-lg">
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#A1A1AA]" />
           <input
+            id="musicfy-header-search-input"
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search songs, artists..."
-            className="w-full pl-9 sm:pl-10 pr-8 py-1.5 sm:py-2 rounded-xl bg-[#111114] border border-[#27272A] text-xs sm:text-sm text-white placeholder-[#A1A1AA] focus:outline-none focus:border-[#10B981] transition-colors"
+            placeholder="Search songs, artists, genres... (Press / to search)"
+            className="w-full pl-10 pr-16 py-2 rounded-xl bg-[#141417] border border-[#27272A] text-xs sm:text-sm text-white placeholder-[#71717A] focus:outline-none focus:border-[#10B981] focus:ring-1 focus:ring-[#10B981]/40 transition-all shadow-inner"
           />
-          {query && (
-            <button
-              type="button"
-              onClick={() => { setQuery(''); navigate('/discover'); }}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] hover:text-white"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
+          <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            {query ? (
+              <button
+                type="button"
+                onClick={handleClear}
+                className="p-1 rounded-full text-[#A1A1AA] hover:text-white hover:bg-white/10 transition-colors"
+                title="Clear search"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <span className="hidden md:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono text-[#71717A] bg-[#27272A]/60 border border-white/5 pointer-events-none">
+                /
+              </span>
+            )}
+          </div>
         </form>
       </div>
 

@@ -124,12 +124,16 @@ export default function Discover({ onAddToPlaylist }) {
 
   return (
     <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-6 sm:space-y-8 pb-32 animate-fadeIn select-none">
-      {/* Search Header */}
+      {/* Search & Discover Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-white tracking-tight">Discover Music</h1>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-white tracking-tight">
+            {query.trim() ? `Search results for "${query.trim()}"` : 'Discover Music'}
+          </h1>
           <p className="text-xs sm:text-sm text-[#A1A1AA] mt-1 font-medium">
-            Search across millions of YouTube music tracks, artists, and live channels.
+            {query.trim()
+              ? 'Showing best matching tracks, artists, and live streams across YouTube Music.'
+              : 'Search across millions of YouTube music tracks, artists, and playlists using the top header bar.'}
           </p>
         </div>
 
@@ -138,34 +142,6 @@ export default function Discover({ onAddToPlaylist }) {
             <WifiOff className="w-3.5 h-3.5" />
             <span>Search unavailable offline</span>
           </div>
-        )}
-      </div>
-
-      {/* Prominent Search Input Bar */}
-      <div className="relative max-w-2xl">
-        <Search className="w-4 h-4 sm:w-5 sm:h-5 absolute left-4 top-1/2 -translate-y-1/2 text-[#A1A1AA]" />
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setSearchParams(e.target.value.trim() ? { q: e.target.value.trim() } : {});
-          }}
-          placeholder="What do you want to play? Search songs, artists, or genres..."
-          className="w-full pl-11 sm:pl-12 pr-10 py-3 sm:py-3.5 rounded-2xl bg-[#111114] border border-[#27272A] hover:border-[#3F3F46] focus:border-[#10B981] text-xs sm:text-sm md:text-base text-white placeholder-[#71717A] focus:outline-none transition-all shadow-inner"
-        />
-        {query && (
-          <button
-            type="button"
-            onClick={() => {
-              setQuery('');
-              setSearchParams({});
-            }}
-            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#A1A1AA] hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors"
-            title="Clear search"
-          >
-            <X className="w-4 h-4" />
-          </button>
         )}
       </div>
 

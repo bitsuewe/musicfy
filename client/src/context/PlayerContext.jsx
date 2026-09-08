@@ -93,9 +93,11 @@ export const PlayerProvider = ({ children }) => {
   const playerRef = useRef(null);
   const progressIntervalRef = useRef(null);
   const userInitiatedPauseRef = useRef(false);
+  const isChangingTrackRef = useRef(false);
   const activeEngineRef = useRef('youtube'); // 'audio' | 'youtube'
   const isScrubbingRef = useRef(false);
   const lastSaveTimeRef = useRef(0);
+  const lastSeekTimeRef = useRef(0);
 
   // Synchronous references to avoid stale closure in MediaSession and background events
   const currentTrackRef = useRef(currentTrack);
@@ -377,23 +379,7 @@ export const PlayerProvider = ({ children }) => {
     };
   }, []);
 
-  // Global Page Visibility Listener: Prevent background audio suspension on tab switch
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (document.hidden) {
-        const audioEl = document.getElementById('musicfy-offline-audio');
-        if (audioEl && isPlayingRef.current && audioEl.paused && !userInitiatedPauseRef.current) {
-          audioEl.play().catch(() => {});
-        }
-      } else {
-        if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
-          audioContextRef.current.resume().catch(() => {});
-        }
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, []);
+  // (Consolidated visibilitychange listener is defined alongside page lifecycle events below)
 
   // Media Session & Native Android Foreground Notification Sync
   const updateMediaSessionMetadata = useCallback((track) => {
@@ -625,6 +611,7 @@ export const PlayerProvider = ({ children }) => {
         },
         onStateChange: (event) => {
           if (event.data === window.YT.PlayerState.PLAYING) {
+            isChangingTrackRef.current = false;
             userInitiatedPauseRef.current = false;
             setIsPlaying(true);
             startKeepAliveAudio();
@@ -639,14 +626,14 @@ export const PlayerProvider = ({ children }) => {
             }
             startProgressTimer();
           } else if (event.data === window.YT.PlayerState.PAUSED) {
-            // If pause was an involuntary background suspension (not user-initiated), do not drop state
-            if (!userInitiatedPauseRef.current && isPlayingRef.current) {
+            // Strictly prevent auto-resume when track is transitioning or user initiated pause
+            if (!userInitiatedPauseRef.current && isPlayingRef.current && !isChangingTrackRef.current) {
               try {
                 if (playerRef.current && playerRef.current.playVideo) {
                   playerRef.current.playVideo();
                 }
               } catch (e) {}
-            } else {
+            } else if (userInitiatedPauseRef.current) {
               setIsPlaying(false);
               stopKeepAliveAudio();
               releaseWakeLock();
@@ -682,6 +669,7 @@ export const PlayerProvider = ({ children }) => {
     stopProgressTimer();
     progressIntervalRef.current = setInterval(() => {
       if (isScrubbingRef.current) return;
+      if (Date.now() - lastSeekTimeRef.current < 1000) return;
 
       let time = 0;
       const audioEl = typeof document !== 'undefined' ? document.getElementById('musicfy-offline-audio') : null;
@@ -730,8 +718,8 @@ export const PlayerProvider = ({ children }) => {
     }
 
     if (repeatModeRef.current === 'one') {
-      seekTo(0);
-      playTrack(cur);
+      // Replay the current track from 0 with fresh audio engine spin
+      playTrack(currentTrackRef.current, null, 0);
       return;
     }
 
@@ -772,10 +760,10 @@ export const PlayerProvider = ({ children }) => {
       } catch (err) {}
     }
 
-    if (q.length > 0) {
-      setCurrentIndex(0);
-      playTrack(q[0]);
-    }
+    // When repeat is 'off' and queue ended, stop cleanly
+    setIsPlaying(false);
+    stopProgressTimer();
+    updateMediaSessionPlaybackState(false);
   };
 
   const showToast = (msg) => {
@@ -792,7 +780,26 @@ export const PlayerProvider = ({ children }) => {
   const playTrack = (track, newQueue = null, startTime = 0) => {
     if (!track || !track.id) return;
 
+    // Immediately flag track change to suppress any accidental pauses/resumes of previous track
+    isChangingTrackRef.current = true;
     userInitiatedPauseRef.current = false;
+
+    // Synchronously stop and unload previous audio immediately to eliminate audio lag and dual playback
+    const existingAudio = typeof document !== 'undefined' ? document.getElementById('musicfy-offline-audio') : null;
+    if (existingAudio) {
+      try {
+        existingAudio.pause();
+        existingAudio.currentTime = 0;
+        existingAudio.removeAttribute('src');
+        existingAudio.load();
+      } catch (e) {}
+    }
+    if (playerRef.current && playerRef.current.pauseVideo) {
+      try {
+        playerRef.current.pauseVideo();
+      } catch (e) {}
+    }
+
     let updatedQueue = queueRef.current;
     let nextIdx = currentIndexRef.current;
 
@@ -863,6 +870,7 @@ export const PlayerProvider = ({ children }) => {
         audioEl.currentTime = startTime;
         audioEl.volume = (isMuted ? 0 : volume) / 100;
         audioEl.play().catch(() => {});
+        isChangingTrackRef.current = false;
 
         audioEl.ontimeupdate = () => {
           if (isScrubbingRef.current) return;
@@ -913,14 +921,26 @@ export const PlayerProvider = ({ children }) => {
         try {
           playerRef.current.loadVideoById({
             videoId: track.id,
-            startSeconds: startTime
+            startSeconds: startTime || 0
           });
-          playerRef.current.playVideo();
           setIsPlaying(true);
           startProgressTimer();
+
+          // Resilient fallback to clear isChangingTrackRef once YouTube iframe buffers
+          setTimeout(() => {
+            if (isChangingTrackRef.current) {
+              isChangingTrackRef.current = false;
+              if (isPlayingRef.current && playerRef.current && playerRef.current.playVideo) {
+                try { playerRef.current.playVideo(); } catch (e) {}
+              }
+            }
+          }, 1200);
         } catch (err) {
           console.warn('YouTube playback error:', err);
+          isChangingTrackRef.current = false;
         }
+      } else {
+        isChangingTrackRef.current = false;
       }
     });
   };
@@ -1016,15 +1036,27 @@ export const PlayerProvider = ({ children }) => {
 
   const seekTo = (seconds) => {
     const sec = Math.max(0, Math.min(durationRef.current || 300, Math.round(seconds)));
+    lastSeekTimeRef.current = Date.now();
     setCurrentTime(sec);
     currentTimeRef.current = sec;
 
     const audioEl = typeof document !== 'undefined' ? document.getElementById('musicfy-offline-audio') : null;
 
     if (activeEngineRef.current === 'audio' && audioEl && audioEl.src) {
-      try { audioEl.currentTime = sec; } catch (e) {}
+      try {
+        audioEl.currentTime = sec;
+        if (isPlayingRef.current && audioEl.paused) {
+          audioEl.play().catch(() => {});
+        }
+      } catch (e) {}
     } else if (playerRef.current && playerRef.current.seekTo) {
-      try { playerRef.current.seekTo(sec, true); } catch (e) {}
+      try {
+        playerRef.current.seekTo(sec, true);
+        // Force immediate audio continuation from the seek point without requiring play/pause
+        if (isPlayingRef.current) {
+          playerRef.current.playVideo();
+        }
+      } catch (e) {}
     }
 
     updateMediaSessionPosition(sec, durationRef.current);
@@ -1114,24 +1146,39 @@ export const PlayerProvider = ({ children }) => {
     };
   }, [startAudioAnchor, updateMediaSessionPlaybackState]);
 
-  // Page Visibility & Lifecycle Event Handling for Background Resiliency
+  // Unified Page Visibility & Lifecycle Event Handling (Guarantees zero dual audio playback across tabs/apps)
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        // App went to background (user switched apps or locked phone)
-        if (isPlayingRef.current) {
-          startAudioAnchor();
+        // App went to background (user switched apps or minimized window)
+        if (isPlayingRef.current && !userInitiatedPauseRef.current && !isChangingTrackRef.current) {
+          startKeepAliveAudio();
           updateMediaSessionPlaybackState(true);
-          // If player was playing and was not manually paused, ensure it keeps playing
-          if (playerRef.current && playerRef.current.playVideo && !userInitiatedPauseRef.current) {
-            try {
-              playerRef.current.playVideo();
-            } catch (e) {}
+
+          if (activeEngineRef.current === 'audio') {
+            const audioEl = document.getElementById('musicfy-offline-audio');
+            if (audioEl && audioEl.src && audioEl.paused) {
+              audioEl.play().catch(() => {});
+            }
+            if (playerRef.current && playerRef.current.pauseVideo) {
+              try { playerRef.current.pauseVideo(); } catch (e) {}
+            }
+          } else if (activeEngineRef.current === 'youtube') {
+            const audioEl = document.getElementById('musicfy-offline-audio');
+            if (audioEl && !audioEl.paused) {
+              try { audioEl.pause(); } catch (e) {}
+            }
+            if (playerRef.current && playerRef.current.playVideo) {
+              try { playerRef.current.playVideo(); } catch (e) {}
+            }
           }
         }
       } else {
         // App returned to foreground
-        if (playerRef.current && playerRef.current.getCurrentTime) {
+        if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+          audioContextRef.current.resume().catch(() => {});
+        }
+        if (activeEngineRef.current === 'youtube' && playerRef.current && playerRef.current.getCurrentTime) {
           try {
             const time = Math.round(playerRef.current.getCurrentTime());
             setCurrentTime(time);
@@ -1150,7 +1197,98 @@ export const PlayerProvider = ({ children }) => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('pagehide', handleVisibilityChange);
     };
-  }, [startAudioAnchor, updateMediaSessionPlaybackState, updateMediaSessionPosition]);
+  }, [startKeepAliveAudio, updateMediaSessionPlaybackState, updateMediaSessionPosition]);
+
+  // Global Keyboard Shortcuts (active whenever user is not typing in an input/textarea)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const activeEl = document.activeElement;
+      const isInput = activeEl && (
+        activeEl.tagName === 'INPUT' ||
+        activeEl.tagName === 'TEXTAREA' ||
+        activeEl.tagName === 'SELECT' ||
+        activeEl.isContentEditable
+      );
+
+      // Focus search bar shortcut: Ctrl+K or '/' key
+      if ((e.key === '/' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k')) && !isInput) {
+        e.preventDefault();
+        const searchInput = document.getElementById('musicfy-header-search-input');
+        if (searchInput) {
+          searchInput.focus();
+          searchInput.select();
+        }
+        return;
+      }
+
+      if (isInput) return;
+
+      // Spacebar: Play / Pause toggle
+      if (e.code === 'Space' || e.key === ' ') {
+        e.preventDefault();
+        togglePlay();
+        return;
+      }
+
+      // Next Track: 'N' key OR Ctrl/Alt + ArrowRight
+      if (e.key.toLowerCase() === 'n' || ((e.ctrlKey || e.altKey) && e.key === 'ArrowRight')) {
+        e.preventDefault();
+        playNext();
+        return;
+      }
+
+      // Previous Track: 'P' key OR Ctrl/Alt + ArrowLeft
+      if (e.key.toLowerCase() === 'p' || ((e.ctrlKey || e.altKey) && e.key === 'ArrowLeft')) {
+        e.preventDefault();
+        playPrev();
+        return;
+      }
+
+      // Seek Forward 5s: ArrowRight (without modifier) or 'L' key
+      if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'l') {
+        e.preventDefault();
+        seekTo(currentTimeRef.current + 5);
+        return;
+      }
+
+      // Seek Backward 5s: ArrowLeft (without modifier) or 'J' key
+      if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'j') {
+        e.preventDefault();
+        seekTo(currentTimeRef.current - 5);
+        return;
+      }
+
+      // Mute / Unmute: 'M' key
+      if (e.key.toLowerCase() === 'm') {
+        e.preventDefault();
+        toggleMute();
+        return;
+      }
+
+      // Repeat toggle: 'R' key
+      if (e.key.toLowerCase() === 'r') {
+        e.preventDefault();
+        const next = repeatModeRef.current === 'off' ? 'all' : repeatModeRef.current === 'all' ? 'one' : 'off';
+        setRepeatMode(next);
+        saveState({ repeatMode: next });
+        showToast(next === 'all' ? 'Repeat: Entire Queue' : next === 'one' ? 'Repeat: Single Track' : 'Repeat: Off');
+        return;
+      }
+
+      // Shuffle toggle: 'S' key
+      if (e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        const next = !shuffleRef.current;
+        setShuffle(next);
+        saveState({ shuffle: next });
+        showToast(next ? 'Shuffle: On' : 'Shuffle: Off');
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [togglePlay, playNext, playPrev, seekTo, toggleMute, saveState]);
 
   // Native Android Media Notification & Lock Screen Action Listener
   useEffect(() => {
@@ -1307,11 +1445,13 @@ export const PlayerProvider = ({ children }) => {
         const next = !shuffle;
         setShuffle(next);
         saveState({ shuffle: next });
+        showToast(next ? 'Shuffle: On' : 'Shuffle: Off');
       },
       setRepeatMode: () => {
         const next = repeatMode === 'off' ? 'all' : repeatMode === 'all' ? 'one' : 'off';
         setRepeatMode(next);
         saveState({ repeatMode: next });
+        showToast(next === 'all' ? 'Repeat: Entire Queue' : next === 'one' ? 'Repeat: Single Track' : 'Repeat: Off');
       },
       addToQueue,
       removeFromQueue,
